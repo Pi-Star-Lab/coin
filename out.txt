@@ -1,0 +1,222 @@
+Warning: Log dir /home/sheelabhadra/Pi-Star/spinningup/data/test_B_100/test_B_100_s0 already exists! Storing info there anyway.
+[32;1mLogging data to /home/sheelabhadra/Pi-Star/spinningup/data/test_B_100/test_B_100_s0/progress.txt[0m
+[36;1mSaving config:
+[0m
+{
+    "batch_size":	128,
+    "bonus":	1,
+    "bonus_after_perf":	0,
+    "bonus_freq":	10000,
+    "cum_bonus":	0.0,
+    "env_fn":	"<function call_experiment.<locals>.thunk_plus.<locals>.<lambda> at 0x7f24b1adf7b8>",
+    "ep_ret_buffer":	"deque([], maxlen=100)",
+    "epochs":	50,
+    "exp_name":	"test_B_100",
+    "gamma":	0.99,
+    "grad_steps":	1,
+    "logger":	{
+        "<spinup.utils.logx.EpochLogger object at 0x7f24b19b8518>":	{
+            "episode_dict":	{},
+            "epoch_dict":	{},
+            "exp_name":	"test_B_100",
+            "first_row":	true,
+            "log_current_row":	{},
+            "log_headers":	[],
+            "output_dir":	"/home/sheelabhadra/Pi-Star/spinningup/data/test_B_100/test_B_100_s0",
+            "output_file":	{
+                "<_io.TextIOWrapper name='/home/sheelabhadra/Pi-Star/spinningup/data/test_B_100/test_B_100_s0/progress.txt' mode='w' encoding='UTF-8'>":	{
+                    "mode":	"w"
+                }
+            }
+        }
+    },
+    "logger_kwargs":	{
+        "exp_name":	"test_B_100",
+        "output_dir":	"/home/sheelabhadra/Pi-Star/spinningup/data/test_B_100/test_B_100_s0"
+    },
+    "max_ep_len":	1000,
+    "max_grad_norm":	10,
+    "num_test_episodes":	0,
+    "polyak":	0.995,
+    "prev_bonus":	0.0,
+    "prior_ret":	200,
+    "q_lr":	0.001,
+    "q_net":	"COINQFunction",
+    "q_net_kwargs":	{},
+    "regret":	0,
+    "regret_bound":	100,
+    "replay_size":	1000000,
+    "save_freq":	1,
+    "seed":	0,
+    "steps_per_epoch":	5000,
+    "training_starts":	20,
+    "update_interval":	100
+}
+[32;1m
+Number of parameters: 	 q: 69124
+[0m
+---------------------------------------
+|          Episodes |              10 |
+|      AverageEpRet |             110 |
+|          StdEpRet |             210 |
+|          MaxEpRet |             291 |
+|          MinEpRet |            -304 |
+|             EpLen |             393 |
+| TotalEnvInteracts |        3.93e+03 |
+|      AverageQcoin |             434 |
+|          StdQcoin |             659 |
+|          MaxQcoin |             289 |
+|          MinQcoin |            -363 |
+|      AverageQtrue |             434 |
+|          StdQtrue |             659 |
+|          MaxQtrue |             289 |
+|          MinQtrue |            -363 |
+|         LossQcoin |         1.6e-09 |
+|         LossQtrue |            11.6 |
+|             Bonus |               1 |
+|     AverageRegret |             534 |
+|         StdRegret |             419 |
+|         MaxRegret |        1.28e+03 |
+|         MinRegret |             231 |
+|              Time |            8.63 |
+---------------------------------------
+---------------------------------------
+|          Episodes |              20 |
+|      AverageEpRet |              83 |
+|          StdEpRet |             198 |
+|          MaxEpRet |             286 |
+|          MinEpRet |            -229 |
+|             EpLen |             329 |
+| TotalEnvInteracts |        7.22e+03 |
+|      AverageQcoin |             435 |
+|          StdQcoin |             660 |
+|          MaxQcoin |             289 |
+|          MinQcoin |            -363 |
+|      AverageQtrue |             435 |
+|          StdQtrue |             660 |
+|          MaxQtrue |             289 |
+|          MinQtrue |            -363 |
+|         LossQcoin |        3.46e-09 |
+|         LossQtrue |            19.8 |
+|             Bonus |               1 |
+|     AverageRegret |        1.91e+03 |
+|         StdRegret |             477 |
+|         MaxRegret |        2.69e+03 |
+|         MinRegret |        1.28e+03 |
+|              Time |            15.4 |
+---------------------------------------
+---------------------------------------
+|          Episodes |              30 |
+|      AverageEpRet |            72.3 |
+|          StdEpRet |             243 |
+|          MaxEpRet |             255 |
+|          MinEpRet |            -417 |
+|             EpLen |             467 |
+| TotalEnvInteracts |        1.19e+04 |
+|      AverageQcoin |             442 |
+|          StdQcoin |             670 |
+|          MaxQcoin |             301 |
+|          MinQcoin |            -376 |
+|      AverageQtrue |             428 |
+|          StdQtrue |             649 |
+|          MaxQtrue |             274 |
+|          MinQtrue |            -795 |
+|         LossQcoin |             155 |
+|         LossQtrue |            17.7 |
+|             Bonus |               1 |
+|     AverageRegret |        3.32e+03 |
+|         StdRegret |             591 |
+|         MaxRegret |        4.18e+03 |
+|         MinRegret |        2.69e+03 |
+|              Time |            36.3 |
+---------------------------------------
+---------------------------------------
+|          Episodes |              40 |
+|      AverageEpRet |             188 |
+|          StdEpRet |             112 |
+|          MaxEpRet |             272 |
+|          MinEpRet |           -37.5 |
+|             EpLen |             291 |
+| TotalEnvInteracts |        1.48e+04 |
+|      AverageQcoin |             438 |
+|          StdQcoin |             663 |
+|          MaxQcoin |             287 |
+|          MinQcoin |            -375 |
+|      AverageQtrue |             402 |
+|          StdQtrue |             612 |
+|          MaxQtrue |             251 |
+|          MinQtrue |       -1.28e+03 |
+|         LossQcoin |             162 |
+|         LossQtrue |            88.6 |
+|             Bonus |               1 |
+|     AverageRegret |        4.47e+03 |
+|         StdRegret |            92.5 |
+|         MaxRegret |        4.66e+03 |
+|         MinRegret |        4.42e+03 |
+|              Time |            49.2 |
+---------------------------------------
+Traceback (most recent call last):
+  File "/home/sheelabhadra/anaconda3/envs/spinup/lib/python3.6/runpy.py", line 193, in _run_module_as_main
+    "__main__", mod_spec)
+  File "/home/sheelabhadra/anaconda3/envs/spinup/lib/python3.6/runpy.py", line 85, in _run_code
+    exec(code, run_globals)
+  File "/home/sheelabhadra/Pi-Star/spinningup/spinup/run.py", line 268, in <module>
+    parse_and_execute_grid_search(cmd, args)
+  File "/home/sheelabhadra/Pi-Star/spinningup/spinup/run.py", line 187, in parse_and_execute_grid_search
+    eg.run(algo, **run_kwargs)
+  File "/home/sheelabhadra/Pi-Star/spinningup/spinup/utils/run_utils.py", line 546, in run
+    data_dir=data_dir, datestamp=datestamp, **var)
+  File "/home/sheelabhadra/Pi-Star/spinningup/spinup/utils/run_utils.py", line 171, in call_experiment
+    subprocess.check_call(cmd, env=os.environ)
+  File "/home/sheelabhadra/anaconda3/envs/spinup/lib/python3.6/subprocess.py", line 306, in check_call
+    retcode = call(*popenargs, **kwargs)
+  File "/home/sheelabhadra/anaconda3/envs/spinup/lib/python3.6/subprocess.py", line 289, in call
+    return p.wait(timeout=timeout)
+  File "/home/sheelabhadra/anaconda3/envs/spinup/lib/python3.6/subprocess.py", line 1477, in wait
+    (pid, sts) = self._try_wait(0)
+  File "/home/sheelabhadra/anaconda3/envs/spinup/lib/python3.6/subprocess.py", line 1424, in _try_wait
+    (pid, sts) = os.waitpid(self.pid, wait_flags)
+KeyboardInterrupt
+
+
+Using default backend (pytorch) for coin.
+
+================================================================================
+[32;1mExperimentGrid [test_B_100] runs over parameters:
+[0m
+ [36;1mepochs                                  [0m [epo] 
+
+	50
+
+ [36;1mgamma                                   [0m [gam] 
+
+	0.99
+
+ [36;1menv_name                                [0m [env] 
+
+	LunarLander-v2
+
+ Variants, counting seeds:               1
+ Variants, not counting seeds:           1
+
+================================================================================
+
+[32;1mPreparing to run the following experiments...[0m
+
+test_B_100
+
+================================================================================
+[36;1mRunning experiment:
+[0m
+test_B_100
+
+[36;1mwith kwargs:
+[0m
+{
+    "env_name":	"LunarLander-v2",
+    "epochs":	50,
+    "gamma":	0.99,
+    "seed":	0
+}
+
+
