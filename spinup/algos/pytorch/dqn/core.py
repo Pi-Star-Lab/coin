@@ -1,23 +1,14 @@
-from copy import deepcopy
-import numpy as np
-import scipy.signal
-
 import torch
 import torch.nn as nn
+import numpy as np
+
+from spinup.utils.policy_utils import cnn, is_image_space, mlp
 
 
 def combined_shape(length, shape=None):
     if shape == None:
         return (length,)
     return (length, shape) if np.isscalar(shape) else (length, *shape)
-
-
-def mlp(sizes, activation, output_activation=nn.Identity):
-    layers = []
-    for j in range(len(sizes) - 1):
-        act = activation if j < len(sizes) - 2 else output_activation
-        layers += [nn.Linear(sizes[j], sizes[j + 1]), act()]
-    return nn.Sequential(*layers)
 
 
 def count_vars(module):
@@ -40,6 +31,27 @@ class MLPQFunction(nn.Module):
         return torch.squeeze(q, -1)  # Critical to ensure q has right shape.
 
 
+class CNNQFunction(nn.Module):
+    def __init__(self, obs_space, act_dim, hidden_sizes, activation):
+        super().__init__()
+        n_input_channels = obs_space.shape[0]
+        self.conv = cnn(n_input_channels)
+
+        # Compute shape by doing one forward pass
+        with torch.no_grad():
+            n_flatten = self.conv(
+                torch.as_tensor(obs_space.sample()[None]).float()
+            ).shape[1]
+
+        self.linear = MLPQFunction(n_flatten, act_dim, hidden_sizes, activation)
+
+        self.q = nn.Sequential(self.conv, self.linear)
+
+    def forward(self, obs):
+        q = self.q(torch.cat([obs], dim=-1))
+        return torch.squeeze(q, -1)
+
+
 class DQNQFunction(nn.Module):
     def __init__(
         self,
@@ -52,12 +64,19 @@ class DQNQFunction(nn.Module):
         obs_dim = observation_space.shape[0]
         act_dim = action_space.n
 
-        self.q = MLPQFunction(
-            obs_dim,
-            act_dim,
-            hidden_sizes,
-            activation,
-        )
+        if is_image_space(observation_space):
+            # Flatten the image (for minigrid envs)
+            self.q = CNNQFunction(
+                observation_space, act_dim, hidden_sizes=(512,), activation=activation
+            )
+        else:
+            obs_dim = observation_space.shape[0]
+            self.q = MLPQFunction(
+                obs_dim,
+                act_dim,
+                hidden_sizes,
+                activation,
+            )
 
     def act(self, obs):
         """

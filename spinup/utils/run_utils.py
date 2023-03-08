@@ -24,7 +24,16 @@ import time
 from tqdm import trange
 import zlib
 
+# Custom environments
 from spinup.environments.bridge import Bridge
+from spinup.environments.flat_fourrooms import FlatFourRoomsEnv7x7, FlatFourRoomsEnv9x9
+from spinup.environments.flat_empty import FlatEmptyRandomEnv6x6, FlatEmptyEnv6x6
+from spinup.environments.flat_multiroom import (
+    FlatMultiRoomEnvN2S4,
+    FlatMultiRoomEnvN4S5,
+    FlatMultiRoomEnvN2S6,
+)
+
 
 DIV_LINE_WIDTH = 80
 
@@ -159,11 +168,41 @@ def call_experiment(
     def thunk_plus():
         # Make 'env_fn' from 'env_name'
         if "env_name" in kwargs:
+            import gym
+
             if "Bridge" in kwargs["env_name"]:
                 kwargs["env_fn"] = Bridge
-            else:
-                import gym
+            elif "Flat" in kwargs["env_name"]:
+                if "FourRooms" in kwargs["env_name"]:
+                    if "7x7" in kwargs["env_name"]:
+                        kwargs["env_fn"] = FlatFourRoomsEnv7x7
+                    elif "9x9" in kwargs["env_name"]:
+                        kwargs["env_fn"] = FlatFourRoomsEnv9x9
+                elif "Empty" in kwargs["env_name"]:
+                    if "Random" in kwargs["env_name"]:
+                        if "6x6" in kwargs["env_name"]:
+                            kwargs["env_fn"] = FlatEmptyRandomEnv6x6
+                    else:
+                        if "6x6" in kwargs["env_name"]:
+                            kwargs["env_fn"] = FlatEmptyEnv6x6
+                elif "MultiRoom" in kwargs["env_name"]:
+                    if "N2S4" in kwargs["env_name"]:
+                        kwargs["env_fn"] = FlatMultiRoomEnvN2S4
+                    elif "N4S5" in kwargs["env_name"]:
+                        kwargs["env_fn"] = FlatMultiRoomEnvN4S5
+                    elif "N2S6" in kwargs["env_name"]:
+                        kwargs["env_fn"] = FlatMultiRoomEnvN2S6
+            elif "NoFrameskip" in kwargs["env_name"]:
+                from spinup.environments.atari import AtariPreprocessing
 
+                env_name = kwargs["env_name"]
+                kwargs["env_fn"] = lambda: AtariPreprocessing(
+                    gym.make(env_name),
+                    terminal_on_life_loss=False,
+                    grayscale_newaxis=True,
+                    scale_obs=True,
+                )
+            else:
                 env_name = kwargs["env_name"]
                 kwargs["env_fn"] = lambda: gym.make(env_name)
             del kwargs["env_name"]

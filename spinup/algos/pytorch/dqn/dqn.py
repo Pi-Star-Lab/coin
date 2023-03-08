@@ -63,21 +63,25 @@ def dqn(
     seed=0,
     steps_per_epoch=5000,
     epochs=100,
-    replay_size=int(1e5),
+    replay_size=int(1e6),
     gamma=0.99,
     polyak=0.995,
     q_lr=1e-3,
-    batch_size=128,
-    update_interval=50,
-    num_test_episodes=2,
+    batch_size=32,  # 128,
+    update_interval=500,  # 50,
+    num_test_episodes=0,
     max_ep_len=1000,
     grad_steps=1,
     max_grad_norm=10,
-    exploration_start=1.0,
-    exploration_end=0.05,
-    exploration_decay=0.99995,
+    epsilon_start=1.0,
+    epsilon_end=0.05,
+    epsilon_frac=0.3,
+    training_starts=2,
+    prior_q_net_path=None,
+    # prior_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/dqn_multiroom_subopt/dqn_multiroom_subopt_s0/pyt_save/model.pt",
+    log_freq=10,
     logger_kwargs=dict(),
-    save_freq=1,
+    save_freq=5000,
 ):
     """
     Deep Q-Network Learning (DQN).
@@ -85,23 +89,21 @@ def dqn(
         env_fn : A function which creates a copy of the environment.
             The environment must satisfy the OpenAI Gym API.
         q_net: The constructor method for a PyTorch Module with an ``act``
-            method, and a ``q`` module. The ``act`` method should accept batches of
-            observations as inputs, and ``q`` should accept a batch of observations
-            as inputs. When called, these should return:
+            method, and a ``q`` module. The ``act`` method should accept a batch of
+            observations as input, and ``q`` should accept a batch of observations
+            as input. When called, these should return:
             ===========  ================  ======================================
             Call         Output Shape      Description
             ===========  ================  ======================================
-            ``act``      (batch, act_dim)  | Numpy array of actions for each
-                                           | observation.
-            ``pi``       (batch, act_dim)  | Tensor containing actions from policy
-                                           | given observations.
-            ``q``        (batch,)          | Tensor containing the current estimate
-                                           | of Q* for the provided observations
-                                           | and actions. (Critical: make sure to
+            ``q``        (batch, act_dim)  | Tensor containing the current estimate
+                                           | of Q* for the provided observations.
+                                           | (Critical: make sure to
                                            | flatten this!)
+            ``act``      (batch)           | Numpy array of actions for a batch of
+                                           | observations.
             ===========  ================  ======================================
-        q_net_kwargs (dict): Any kwargs appropriate for the ActorCritic object
-            you provided to DDPG.
+        q_net_kwargs (dict): Any kwargs appropriate for the Q-network you provided
+            to DQN.
         seed (int): Seed for random number generators.
         steps_per_epoch (int): Number of steps of interaction (state-action pairs)
             for the agent and the environment in each epoch.
@@ -115,15 +117,11 @@ def dqn(
                 \\rho \\theta_{\\text{targ}} + (1-\\rho) \\theta
             where :math:`\\rho` is polyak. (Always between 0 and 1, usually
             close to 1.)
-        pi_lr (float): Learning rate for policy.
         q_lr (float): Learning rate for Q-networks.
         batch_size (int): Minibatch size for SGD.
         start_steps (int): Number of steps for uniform-random action selection,
             before running real policy. Helps exploration.
-        update_after (int): Number of env interactions to collect before
-            starting to do gradient descent updates. Ensures replay buffer
-            is full enough for useful updates.
-        update_every (int): Number of env interactions that should elapse
+        update_interval (int): Number of env interactions that should elapse
             between gradient descent updates. Note: Regardless of how long
             you wait between updates, the ratio of env steps to gradient steps
             is locked to 1.
@@ -134,10 +132,24 @@ def dqn(
         max_ep_len (int): Maximum length of trajectory / episode / rollout.
         grad_steps (int): Number of gradient steps at each update.
         max_grad_norm (float): Maximum vlaue for gradient clipping.
+        epsilon_start (float): Epsilon value at the start of training.
+        epsilon_end (float): Final epsilon value.
+        epsilon_frac (float): Fraction of total number of env interactions to
+            reach the final epsilon value.
+        training_starts (int): Number of episodes after which training starts.
+        prior_q_net_path (str): Path to the Q-net affiliated with the prior
+            suboptimal policy.
+        log_freq (int): How often (episodes) to log training stats.
         logger_kwargs (dict): Keyword args for EpochLogger.
         save_freq (int): How often (in terms of gap between epochs) to save
             the current policy and value function.
     """
+
+    prior_ret = 0
+    regret = 0
+
+    ep_ret_buffer = deque(maxlen=100)
+
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())
 
@@ -149,6 +161,17 @@ def dqn(
 
     # Create q-network module and target network
     q_net = q_net(env.observation_space, env.action_space, **q_net_kwargs)
+
+    # Get prior q-network
+    if prior_q_net_path is not None:
+        prior_q_net = torch.load(prior_q_net_path)
+        assert isinstance(
+            prior_q_net, core.DQNQFunction
+        ), "Prior Q-net must of type `DQNQFunction`."
+        q_net.q = deepcopy(prior_q_net.q)
+    else:
+        prior_q_net = None
+
     q_net_targ = deepcopy(q_net)
 
     # Freeze target networks with respect to optimizers (only update via polyak averaging)
@@ -162,11 +185,8 @@ def dqn(
     var_counts = tuple(core.count_vars(module) for module in [q_net.q])
     logger.log(f"\nNumber of parameters: \t q: {var_counts[0]}\n")
 
-    def exploration_schedule(exploration_rate):
-        if exploration_rate > exploration_end:
-            return exploration_rate * exploration_decay
-        else:
-            return exploration_end
+    def exploration_schedule(epsilon_start, frac_steps, epsilon_frac):
+        return max(epsilon_end, epsilon_start * (1 - frac_steps / epsilon_frac))
 
     # Set up function for computing DQN loss
     def compute_loss_q(data):
@@ -177,7 +197,6 @@ def dqn(
             data["obs2"],
             data["done"],
         )
-
         # Current Q-value estimates
         cur_q = q_net.q(o)
         # Extract Q-values for the actions in the buffer
@@ -206,16 +225,17 @@ def dqn(
     # Set up model saving
     logger.setup_pytorch_saver(q_net)
 
-    def update(data, grad_steps):
+    def update(data, grad_steps, start):
         for _ in range(grad_steps):
             # First run one gradient descent step for Q.
             loss_q, loss_info = compute_loss_q(data)
 
-            q_optimizer.zero_grad()
-            loss_q.backward()
-            # Clip gradient norm
-            torch.nn.utils.clip_grad_norm_(q_net.q.parameters(), max_grad_norm)
-            q_optimizer.step()
+            if start:
+                q_optimizer.zero_grad()
+                loss_q.backward()
+                # Clip gradient norm
+                torch.nn.utils.clip_grad_norm_(q_net.q.parameters(), max_grad_norm)
+                q_optimizer.step()
 
         # Record things
         logger.store(LossQ=loss_q.item(), **loss_info)
@@ -229,32 +249,56 @@ def dqn(
                 p_targ.data.add_((1 - polyak) * p.data)
 
     def get_action(o, deterministic=False):
+        if len(o.shape) > 1:
+            # For grayscale image input we add an axis for the channel
+            o = torch.as_tensor(o, dtype=torch.float32).unsqueeze_(1)
+        else:
+            o = torch.as_tensor(o, dtype=torch.float32)
         if deterministic:
-            return q_net.act(torch.as_tensor(o, dtype=torch.float32))
+            return q_net.act(o)
         if np.random.rand() < exploration_rate:
             return np.random.choice(env.action_space.n)
-        return q_net.act(torch.as_tensor(o, dtype=torch.float32))
+        return q_net.act(o)
 
     def test_agent():
         for j in range(num_test_episodes):
+            # test_env.seed(seed=seed)
+            # test_env.seed(seed=1)
             o, d, ep_ret, ep_len = test_env.reset(), False, 0, 0
             while not (d or (ep_len == max_ep_len)):
                 # Take deterministic actions at test time (noise_scale=0)
-                o, r, d, _ = test_env.step(get_action(o, deterministic=True))
+                a = get_action(o, deterministic=True)
+                if isinstance(a, np.ndarray):
+                    a = a.item()
+                o, r, d, _ = test_env.step(a)
                 ep_ret += r
                 ep_len += 1
             logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
 
+    def compute_regret(cur_return, prior_ret):
+        """
+        Computes the episodic regret.
+        """
+        return max(prior_ret - cur_return, 0)
+
     # Prepare for interaction with environment
     total_steps = steps_per_epoch * epochs
     start_time = time.time()
+    # env.seed(seed=seed)
+    # env.seed(seed=1)
     o, ep_ret, ep_len = env.reset(), 0, 0
-    exploration_rate = 1.0
+    n_episodes = 0
+    exploration_rate = epsilon_start
 
     for t in range(total_steps):
         a = get_action(o)
+        if isinstance(a, np.ndarray):
+            a = a.item()
         # Step the env
         o2, r, d, _ = env.step(a)
+
+        # env.render()
+        # time.sleep(1e-2)
 
         ep_ret += r
         ep_len += 1
@@ -265,46 +309,74 @@ def dqn(
         replay_buffer.store(o, a, r, o2, d)
 
         # Exploration schedule
-        exploration_rate = exploration_schedule(exploration_rate)
-
+        if n_episodes >= training_starts:
+            exploration_rate = exploration_schedule(
+                epsilon_start, t / total_steps, epsilon_frac
+            )
         # Super critical, easy to overlook step: make sure to update
         # most recent observation!
         o = o2
 
         # End of trajectory handling
         if d or (ep_len == max_ep_len):
+            n_episodes += 1
             logger.store(EpRet=ep_ret, EpLen=ep_len)
+            ep_ret_buffer.append(ep_ret)
+            if n_episodes >= training_starts:
+                regret += compute_regret(ep_ret, prior_ret)
+            else:
+                prior_ret = np.mean(ep_ret_buffer)
+            logger.store(Regret=regret)
+
+            # env.seed(seed=seed)
+            # env.seed(seed=1)
             o, ep_ret, ep_len = env.reset(), 0, 0
+
+            # Logging
+            if n_episodes % log_freq == 0:
+                # Test the performance of the deterministic version of the agent.
+                test_agent()
+
+                # Log info about epoch
+                logger.log_tabular("Episodes", n_episodes)
+                logger.log_tabular("Epsilon", exploration_rate)
+                logger.log_tabular("EpRet", with_min_and_max=True)
+                logger.log_tabular("EpLen", average_only=True)
+                if num_test_episodes > 0:
+                    logger.log_tabular("TestEpRet", with_min_and_max=True)
+                    logger.log_tabular("TestEpLen", average_only=True)
+                if "QVals" in logger.epoch_dict:
+                    logger.log_tabular("QVals", with_min_and_max=True)
+                    logger.log_tabular("LossQ", average_only=True)
+                logger.log_tabular("TotalEnvInteracts", t)
+                logger.log_tabular("Regret", regret)
+                logger.log_tabular("Time", time.time() - start_time)
+                logger.dump_tabular()
 
         # Update handling
         if len(replay_buffer) >= batch_size and (t + 1) % update_interval == 0:
             for _ in range(update_interval):
                 batch = replay_buffer.sample_batch(batch_size)
-                update(data=batch, grad_steps=grad_steps)
+                update(
+                    data=batch,
+                    grad_steps=grad_steps,
+                    start=n_episodes >= training_starts,
+                )
 
-        # End of epoch handling
-        if (t + 1) % steps_per_epoch == 0:
-            epoch = (t + 1) // steps_per_epoch
-
+        if (t + 1) % save_freq == 0:
             # Save model
-            if (epoch % save_freq == 0) or (epoch == epochs):
-                logger.save_state({"env": env}, None)
+            logger.save_state({"env": env}, None)
 
-            # Test the performance of the deterministic version of the agent.
-            test_agent()
+            # Save all the desired logs into npy files for plotting
+            logger.save_log("EpRet")
+            logger.save_log("EpLen")
+            logger.save_log("Regret")
 
-            # Log info about epoch
-            logger.log_tabular("Epoch", epoch)
-            logger.log_tabular("Epsilon", exploration_rate)
-            logger.log_tabular("EpRet", with_min_and_max=True)
-            logger.log_tabular("TestEpRet", with_min_and_max=True)
-            logger.log_tabular("EpLen", average_only=True)
-            logger.log_tabular("TestEpLen", average_only=True)
-            logger.log_tabular("TotalEnvInteracts", t)
-            logger.log_tabular("QVals", with_min_and_max=True)
-            logger.log_tabular("LossQ", average_only=True)
-            logger.log_tabular("Time", time.time() - start_time)
-            logger.dump_tabular()
+    # Save everything at the end of training
+    logger.save_state({"env": env}, None)
+    logger.save_log("EpRet")
+    logger.save_log("EpLen")
+    logger.save_log("Regret")
 
 
 if __name__ == "__main__":
