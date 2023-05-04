@@ -24,9 +24,10 @@ class ReplayBuffer:
         self.rew_buf = np.zeros(size, dtype=np.float32)
         self.coin_rew_buf = np.zeros(size, dtype=np.float32)
         self.done_buf = np.zeros(size, dtype=np.float32)
+        self.G_buf = np.zeros(size, dtype=np.float32)
         self.ptr, self.size, self.max_size = 0, 0, size
 
-    def store(self, obs, act, rew, coin_rew, next_obs, next_act, done):
+    def store(self, obs, act, rew, coin_rew, next_obs, next_act, done, G):
         """
         Add a batch of transitions to the buffer.
         """
@@ -37,6 +38,7 @@ class ReplayBuffer:
         self.rew_buf[self.ptr] = rew
         self.coin_rew_buf[self.ptr] = coin_rew
         self.done_buf[self.ptr] = done
+        self.G_buf[self.ptr] = G
         self.ptr = (self.ptr + 1) % self.max_size
         self.size = min(self.size + 1, self.max_size)
 
@@ -53,6 +55,7 @@ class ReplayBuffer:
             rew=self.rew_buf[idxs],
             coin_rew=self.coin_rew_buf[idxs],
             done=self.done_buf[idxs],
+            G=self.G_buf[idxs],
         )
         return {k: torch.as_tensor(v, dtype=torch.float32) for k, v in batch.items()}
 
@@ -68,6 +71,7 @@ class ReplayBuffer:
             rew=self.rew_buf[idxs],
             coin_rew=self.coin_rew_buf[idxs],
             done=self.done_buf[idxs],
+            G=self.G_buf[idxs],
         )
         return {k: torch.as_tensor(v, dtype=torch.float32) for k, v in batch.items()}
 
@@ -77,12 +81,12 @@ class ReplayBuffer:
         """
         return self.ptr
 
-    def update_coin_rewards(self, bonus_val, gamma):
+    def update_coin_rewards(self, bonus, gamma):
         """
         Update coin rewards.
         """
         for idx in range(self.ptr):
-            self.coin_rew_buf[idx] -= bonus_val
+            self.coin_rew_buf[idx] -= bonus
 
 
 def coin(
@@ -96,34 +100,103 @@ def coin(
     gamma=0.99,
     polyak=0.995,
     q_lr=1e-3,
-    num_test_episodes=0,
-    batch_size=128,
-    update_interval=100,
-    max_ep_len=1000,
-    bonus=1.0,
-    bonus_freq=10000,
-    regret_bound=100,
-    log_freq=10,
-    training_starts=20,
-    prior_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/dqn_ll_run_1/dqn_ll_run_1_s0/pyt_save/model.pt",
+    # batch_size=128,
+    # update_interval=100,
+    # num_test_episodes=0,
+    # max_ep_len=1000,
+    # grad_steps=1,
+    # max_grad_norm=10,
+    # bonus=1.0,
+    # bonus_freq=10000,
+    # training_starts=20,
     grad_steps=1,
     max_grad_norm=10,
+    batch_size=128,
+    update_interval=100,
+    num_test_episodes=0,
+    max_ep_len=1000,
+    bonus=1,
+    bonus_freq=10000,
+    training_starts=20,
+    # base_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/coin_ll_sanity_check/pyt_save/model.pt",
+    base_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/subopt_ll/subopt_ll_s0/pyt_save/model.pt",
+    # base_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/dqn_ll_run_1/dqn_ll_run_1_s0/pyt_save/model.pt",
+    # base_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/fourrooms_dqn_base/fourrooms_dqn_prior_s0/pyt_save/model.pt",
+    # base_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/coin_emptyrandom_b_1/coin_emptyrandom_b_1_s0/pyt_save/model.pt",
+    # base_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/dqn_multiroom_subopt/dqn_multiroom_subopt_s0/pyt_save/model.pt",
+    regret_bound=100,
+    log_freq=10,
     logger_kwargs=dict(),
-    save_freq=1,
+    save_freq=5000,
+    env_seed=-1,
 ):
     """
     Continual Optimistic Initialization (COIN) for discrete action spaces.
+    Args:
+        env_fn : A function which creates a copy of the environment.
+            The environment must satisfy the OpenAI Gym API.
+        q_net: The constructor method for a PyTorch Module with an ``act``
+            method, and a ``q`` module. The ``act`` method should accept batches of
+            observations as inputs, and ``q`` should accept a batch of observations
+            as inputs. When called, these should return:
+            ===========  ================  ======================================
+            Call         Output Shape      Description
+            ===========  ================  ======================================
+            ``q_coin``   (batch, act_dim)  | Tensor containing the current estimate
+                                           | of Q* for the provided observations.
+                                           | (Critical: make sure to
+                                           | flatten this!)
+            ``act``      (batch)           | Numpy array of actions for a batch of
+                                           | observations derived from Q*.
+            ===========  ================  ======================================
+        q_net_kwargs (dict): Any kwargs appropriate for the ActorCritic object
+            you provided to DDPG.
+        seed (int): Seed for random number generators.
+        steps_per_epoch (int): Number of steps of interaction (state-action pairs)
+            for the agent and the environment in each epoch.
+        epochs (int): Number of epochs to run and train agent.
+        replay_size (int): Maximum length of replay buffer.
+        gamma (float): Discount factor. (Always between 0 and 1.)
+        polyak (float): Interpolation factor in polyak averaging for target
+            networks. Target networks are updated towards main networks
+            according to:
+            .. math:: \\theta_{\\text{targ}} \\leftarrow
+                \\rho \\theta_{\\text{targ}} + (1-\\rho) \\theta
+            where :math:`\\rho` is polyak. (Always between 0 and 1, usually
+            close to 1.)
+        q_lr (float): Learning rate for Q-networks.
+        batch_size (int): Minibatch size for SGD.
+        update_interval (int): Number of env interactions that should elapse
+            between gradient descent updates. Note: Regardless of how long
+            you wait between updates, the ratio of env steps to gradient steps
+            is locked to 1.
+        num_test_episodes (int): Number of episodes to test the deterministic
+            policy at the end of each epoch.
+        max_ep_len (int): Maximum length of trajectory / episode / rollout.
+        grad_steps (int): Number of gradient steps at each update.
+        max_grad_norm (float): Maximum vlaue for gradient clipping.
+        bonus (float): Bonus value.
+        bonus_freq (int): Number of env interactions that should elapse between
+            bonus value increment.
+        training_starts (int): Number of episodes after which training starts.
+        base_q_net_path (str): Path to the Q-net affiliated with the baseline
+            suboptimal policy.
+        regret_bound (float): Maximum allowed baseline regret per state and
+            per exploratory action (w.r.t. the base suboptimal policy).
+        log_freq (int): How often (episodes) to log training stats.
+        logger_kwargs (dict): Keyword args for EpochLogger.
+        save_freq (int): How often (in terms of gap between epochs) to save
+            the current policy and value function.
+        env_seed (int): Environment seed if the baseline policy works only on a
+            environment seed.
     """
 
     # COIN specific hyperparams
     cum_bonus = 0.0  # cumulative bonus
+    cum_bonus += bonus
 
-    # LL
-    prior_ret = 0  # 175  # return of the policy to improve
-
-    # Bridge-7
-    # prior_ret = 9  # return of the policy to improve
-
+    # Performance of baseline policy
+    base_perf = 0
     regret = 0  # actual total regret after adding bonus
 
     ep_ret_buffer = deque(maxlen=100)
@@ -137,13 +210,19 @@ def coin(
     env, test_env = env_fn(), env_fn()
     obs_dim = env.observation_space.shape
 
-    # Get prior q-network
-    prior_q_net = torch.load(prior_q_net_path)
-
     # Create q-network module and target network
     q_net = q_net(env.observation_space, env.action_space, **q_net_kwargs)
-    q_net.q_coin = deepcopy(prior_q_net.q)
-    q_net.q_true = deepcopy(prior_q_net.q)
+
+    # Get base q-network
+    if base_q_net_path is not None:
+        base_q_net = torch.load(base_q_net_path)
+        if isinstance(base_q_net, core.COINQFunction):
+            q_net.q_coin = deepcopy(base_q_net.q_coin)
+        elif isinstance(base_q_net, dqn_core.DQNQFunction):
+            q_net.q_coin = deepcopy(base_q_net.q)
+    else:
+        base_q_net = None
+
     q_net_targ = deepcopy(q_net)
 
     # Freeze target networks with respect to optimizers (only update via polyak averaging)
@@ -163,9 +242,9 @@ def coin(
             """
             MSE loss.
             """
-            return torch.sum(weight * (pred - targ) ** 2)
+            return torch.mean(weight * (pred - targ) ** 2)
 
-        o, a, r, cr, o2, a2, d = (
+        o, a, r, cr, o2, a2, d, G = (
             data["obs"],
             data["act"],
             data["rew"],
@@ -173,15 +252,12 @@ def coin(
             data["obs2"],
             data["act2"],
             data["done"],
+            data["G"],
         )
 
         # Current Q-value estimates
         cur_q_coin = q_net.q_coin(o)
         cur_q_coin_a = torch.gather(cur_q_coin, dim=-1, index=a.long()).squeeze(-1)
-
-        # Current true Q-value estimates
-        cur_q_true = q_net.q_true(o)
-        cur_q_true_a = torch.gather(cur_q_true, dim=-1, index=a.long()).squeeze(-1)
 
         # Bellman backup for Q function
         with torch.no_grad():
@@ -202,52 +278,42 @@ def coin(
             )
             backup_coin = targ_q_coin
 
-            # Q-true
-            next_q_true = q_net_targ.q_true(o2)
-            # Retrieve the Q-values for the actions from the replay buffer
-            next_q_true_a = torch.gather(next_q_true, dim=1, index=a2.long())
-            next_q_true_a = next_q_true_a.squeeze(-1)
-            # 1-step TD target
-            targ_q_true_a = r + gamma * (1 - d) * next_q_true_a
-
-            targ_q_true = q_net_targ.q_true(o)
-            # Q-values of other actions must remain unchanged
-            targ_q_true = targ_q_true.index_put_(
-                tuple(torch.column_stack((torch.arange(a.shape[0]), a)).long().t()),
-                targ_q_true_a,
-            )
-            backup_true = targ_q_true
-
             # Regret bound
-            if prior_q_net is not None:
-                # If current action and prior greedy action are same
-                prior_max_q, prior_a = prior_q_net.q(o).max(dim=1)
-                is_prior_act = (a.squeeze(-1) == prior_a.float()).float().squeeze(-1)
-                # Q-value of the prior greedy action
-                prior_act_q = torch.gather(
-                    prior_q_net.q(o), dim=-1, index=a.long()
-                ).squeeze(-1)
+            if base_q_net is not None:
+                # If current action and base greedy action are same
+                if isinstance(base_q_net, core.COINQFunction):
+                    base_max_q, base_a = base_q_net.q_coin(o).max(dim=1)
+                elif isinstance(base_q_net, dqn_core.DQNQFunction):
+                    base_max_q, base_a = base_q_net.q(o).max(dim=1)
+                is_base_act = (a.squeeze(-1) == base_a.float()).float().squeeze(-1)
+                # Q-value of the base greedy action
+                if isinstance(base_q_net, core.COINQFunction):
+                    base_act_q = torch.gather(
+                        base_q_net.q_coin(o), dim=-1, index=a.long()
+                    ).squeeze(-1)
+                elif isinstance(base_q_net, dqn_core.DQNQFunction):
+                    base_act_q = torch.gather(
+                        base_q_net.q(o), dim=-1, index=a.long()
+                    ).squeeze(-1)
                 # The regret gap to close
-                # delta = prior_max_q - bonus / (1 - gamma) - prior_act_q
-                delta = prior_max_q - (t / total_steps) * (bonus / (1 - gamma))
-                eta = (prior_max_q - cur_q_true_a) / regret_bound
+                # delta = base_max_q - bonus / (1 - gamma) - base_act_q
+                # delta = base_max_q - (t / total_steps) * (bonus / (1 - gamma))
+                delta = base_max_q - bonus / (1 - gamma)
+                eta = (base_max_q - G) / regret_bound
 
                 # The Q-value we want to achieve
                 targ_regret = delta
 
-                # If the (avg.) return is greater than the prior best action
-                is_better_act = torch.gt(cur_q_true_a, prior_max_q).float().squeeze(-1)
+                # If the (avg.) return is greater than the base best action
+                is_better_act = torch.gt(G, base_max_q).float().squeeze(-1)
 
-                # If action is from the prior policy, use the TD target
-                # Elif action is not from prior and has no regret, use the TD target
-                # Else take the min of the TD target and regret target
-
+                # If action is from the base policy, use the TD target
+                # Elif action is not from base and has no regret, use the TD target
+                # Else take the regret target
                 backup_coin_a = (
-                    is_prior_act * targ_q_coin_a
-                    + (1 - is_prior_act) * is_better_act * targ_q_coin_a
-                    + (1 - is_prior_act)
-                    * (1 - is_better_act)
-                    * torch.minimum(targ_q_coin_a, targ_regret).squeeze(-1)
+                    is_base_act * targ_q_coin_a
+                    + (1 - is_base_act) * is_better_act * targ_q_coin_a
+                    + (1 - is_base_act) * (1 - is_better_act) * targ_regret
                 )
 
                 backup_coin = targ_q_coin.index_put_(
@@ -256,11 +322,9 @@ def coin(
                 )
 
                 mse_weights_a = (
-                    is_prior_act * torch.ones_like(targ_q_coin_a)
-                    + (1 - is_prior_act)
-                    * is_better_act
-                    * torch.ones_like(targ_q_coin_a)
-                    + (1 - is_prior_act)
+                    is_base_act * torch.ones_like(targ_q_coin_a)
+                    + (1 - is_base_act) * is_better_act * torch.ones_like(targ_q_coin_a)
+                    + (1 - is_base_act)
                     * (1 - is_better_act)
                     * eta
                     * torch.ones_like(targ_q_coin_a)
@@ -272,28 +336,19 @@ def coin(
                     mse_weights_a,
                 )
 
-                # print(backup_coin)
-                # print(mse_weights)
-
         # MSE loss against modified Bellman backup
-        if prior_q_net is not None:
+        if base_q_net is not None:
             loss_q_coin = weighted_mse_loss(cur_q_coin, backup_coin, mse_weights)
         else:
             loss_q_coin = ((cur_q_coin - backup_coin) ** 2).mean()
 
-        # MSE loss
-        loss_q_true = ((cur_q_true - backup_true) ** 2).mean()
-
         # Useful info for logging
-        loss_info = dict(
-            Qcoin=cur_q_coin_a.detach().numpy(), Qtrue=cur_q_true_a.detach().numpy()
-        )
+        loss_info = dict(Qcoin=cur_q_coin_a.detach().numpy())
 
-        return loss_q_coin, loss_q_true, loss_info
+        return loss_q_coin, loss_info
 
     # Set up optimizers for q-function
     q_coin_optimizer = Adam(q_net.q_coin.parameters(), lr=q_lr)
-    q_true_optimizer = Adam(q_net.q_true.parameters(), lr=q_lr)
 
     # Set up model saving
     logger.setup_pytorch_saver(q_net)
@@ -301,7 +356,7 @@ def coin(
     def update(data, grad_steps, start):
         for _ in range(grad_steps):
             # First run one gradient descent step for Q.
-            loss_q_coin, loss_q_true, loss_info = compute_loss_q(data)
+            loss_q_coin, loss_info = compute_loss_q(data)
 
             if start:
                 # Update Q coin
@@ -311,17 +366,8 @@ def coin(
                 torch.nn.utils.clip_grad_norm_(q_net.q_coin.parameters(), max_grad_norm)
                 q_coin_optimizer.step()
 
-                # Update Q true
-                q_true_optimizer.zero_grad()
-                loss_q_true.backward()
-                # Clip gradient norm
-                torch.nn.utils.clip_grad_norm_(q_net.q_true.parameters(), max_grad_norm)
-                q_true_optimizer.step()
-
         # Record things
-        logger.store(
-            LossQcoin=loss_q_coin.item(), LossQtrue=loss_q_true.item(), **loss_info
-        )
+        logger.store(LossQcoin=loss_q_coin.item(), **loss_info)
 
         if start:
             # Finally, update target networks by polyak averaging.
@@ -338,6 +384,8 @@ def coin(
 
     def test_agent():
         for j in range(num_test_episodes):
+            if env_seed >= 0:
+                test_env.seed(seed=seed)
             o, d, ep_ret, ep_len = test_env.reset(), False, 0, 0
             while not (d or (ep_len == max_ep_len)):
                 # Take deterministic actions at test time (noise_scale=0)
@@ -346,22 +394,23 @@ def coin(
                 ep_len += 1
             logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
 
-    def compute_regret(cur_return, prior_ret):
-        return max(prior_ret - cur_return, 0)
+    def compute_regret(cur_return, base_perf):
+        return max(base_perf - cur_return, 0)
 
     # Prepare for interaction with environment
     total_steps = steps_per_epoch * epochs
     start_time = time.time()
+    if env_seed >= 0:
+        env.seed(seed=seed)
     o, ep_ret, ep_len = env.reset(), 0, 0
     n_episodes = 0
+    rollout = []
 
     for t in range(total_steps):
         a = get_action(o)
 
         # Step the env
         o2, r, d, _ = env.step(a)
-
-        # env.render()
 
         # Penalized reward for exploration
         cr = r - bonus
@@ -373,8 +422,7 @@ def coin(
 
         a2 = get_action(o2)
 
-        # Add experience to replay buffer
-        replay_buffer.store(o, a, r, cr, o2, a2, d)
+        rollout.append((o, a, r, cr, o2, a2, d))
 
         # Super critical, easy to overlook step: make sure to update
         # most recent observation!
@@ -382,30 +430,48 @@ def coin(
 
         # End of trajectory handling
         if d or (ep_len == max_ep_len):
+            # G computation
+            G = [0] * len(rollout)
+            G[-1] = rollout[-1][2]
+            for i in range(len(rollout) - 2, -1, -1):
+                G[i] = rollout[i][2] + gamma * G[i + 1]
+            # Add all experiences in the episode to replay buffer
+            for i, transition in enumerate(rollout):
+                o, a, r, cr, o2, a2, d = transition
+                replay_buffer.store(o, a, r, cr, o2, a2, d, G[i])
+
+            rollout = []
+
             n_episodes += 1
             logger.store(EpRet=ep_ret, EpLen=ep_len)
             ep_ret_buffer.append(ep_ret)
             if n_episodes >= training_starts:
-                regret += compute_regret(ep_ret, prior_ret)
+                regret += compute_regret(ep_ret, base_perf)
             else:
-                prior_ret = np.mean(ep_ret_buffer)
+                base_perf = np.mean(ep_ret_buffer)
             logger.store(Regret=regret)
+
+            if env_seed >= 0:
+                env.seed(seed=seed)
+
             o, ep_ret, ep_len = env.reset(), 0, 0
 
             # Logging
             if n_episodes % log_freq == 0:
+                # Test the performance of the deterministic version of the agent.
+                test_agent()
+
                 logger.log_tabular("Episodes", n_episodes)
                 logger.log_tabular("EpRet", with_min_and_max=True)
-                # logger.log_tabular("TestEpRet", with_min_and_max=True)
                 logger.log_tabular("EpLen", average_only=True)
-                # logger.log_tabular("TestEpLen", average_only=True)
+                if num_test_episodes > 0:
+                    logger.log_tabular("TestEpRet", with_min_and_max=True)
+                    logger.log_tabular("TestEpLen", average_only=True)
                 logger.log_tabular("TotalEnvInteracts", t)
-                logger.log_tabular("Qcoin", with_min_and_max=True)
-                logger.log_tabular("Qtrue", with_min_and_max=True)
-                logger.log_tabular("LossQcoin", average_only=True)
-                logger.log_tabular("LossQtrue", average_only=True)
-                logger.log_tabular("Bonus", bonus)
-                logger.log_tabular("Regret", with_min_and_max=True)
+                logger.log_tabular("BasePerf", base_perf)
+                logger.log_tabular("Bonus (b)", cum_bonus)
+                logger.log_tabular("RegretBound (B)", regret_bound)
+                logger.log_tabular("Regret", regret)
                 logger.log_tabular("Time", time.time() - start_time)
                 logger.dump_tabular()
 
@@ -418,28 +484,15 @@ def coin(
                     start=n_episodes >= training_starts,
                 )
 
-        # # End of epoch handling
-        # if (t + 1) % steps_per_epoch == 0:
-        #     epoch = (t + 1) // steps_per_epoch
+        if (t + 1) % save_freq == 0:
+            # Save model
+            logger.save_state({"env": env}, None)
 
-        #     # Test the performance of the deterministic version of the agent.
-        #     test_agent()
-
-        #     # Log info about epoch
-        #     logger.log_tabular("Epoch", epoch)
-        #     logger.log_tabular("EpRet", with_min_and_max=True)
-        #     # logger.log_tabular("TestEpRet", with_min_and_max=True)
-        #     logger.log_tabular("EpLen", average_only=True)
-        #     # logger.log_tabular("TestEpLen", average_only=True)
-        #     logger.log_tabular("TotalEnvInteracts", t)
-        #     logger.log_tabular("Qcoin", with_min_and_max=True)
-        #     logger.log_tabular("Qtrue", with_min_and_max=True)
-        #     logger.log_tabular("LossQcoin", average_only=True)
-        #     logger.log_tabular("LossQtrue", average_only=True)
-        #     logger.log_tabular("Bonus", bonus)
-        #     logger.log_tabular("Regret", with_min_and_max=True)
-        #     logger.log_tabular("Time", time.time() - start_time)
-        #     logger.dump_tabular()
+            # Save all the desired logs into npy files for plotting
+            logger.save_log("EpRet")
+            logger.save_log("EpLen")
+            logger.save_log("Bonus")
+            logger.save_log("Regret")
 
     # Save model
     logger.save_state({"env": env}, None)
