@@ -111,15 +111,15 @@ def coin(
     # training_starts=20,
     grad_steps=1,
     max_grad_norm=10,
-    batch_size=128,
+    batch_size=32,
     update_interval=100,
     num_test_episodes=0,
     max_ep_len=1000,
     bonus=1,
     bonus_freq=10000,
     training_starts=20,
-    # base_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/coin_ll_sanity_check/pyt_save/model.pt",
-    base_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/subopt_ll/subopt_ll_s0/pyt_save/model.pt",
+    base_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/dqn_from_subopt_ll/dqn_from_subopt_ll_s0/pyt_save/model.pt",
+    # base_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/subopt_ll/subopt_ll_s0/pyt_save/model.pt",
     # base_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/dqn_ll_run_1/dqn_ll_run_1_s0/pyt_save/model.pt",
     # base_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/fourrooms_dqn_base/fourrooms_dqn_prior_s0/pyt_save/model.pt",
     # base_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/coin_emptyrandom_b_1/coin_emptyrandom_b_1_s0/pyt_save/model.pt",
@@ -309,11 +309,13 @@ def coin(
 
                 # If action is from the base policy, use the TD target
                 # Elif action is not from base and has no regret, use the TD target
-                # Else take the regret target
+                # Else min of the regret target and TD target (implementation detail)
                 backup_coin_a = (
                     is_base_act * targ_q_coin_a
                     + (1 - is_base_act) * is_better_act * targ_q_coin_a
-                    + (1 - is_base_act) * (1 - is_better_act) * targ_regret
+                    + (1 - is_base_act)
+                    * (1 - is_better_act)
+                    * torch.minimum(targ_q_coin_a, targ_regret).squeeze(-1)
                 )
 
                 backup_coin = targ_q_coin.index_put_(
@@ -385,7 +387,7 @@ def coin(
     def test_agent():
         for j in range(num_test_episodes):
             if env_seed >= 0:
-                test_env.seed(seed=seed)
+                test_env.seed(seed=env_seed)
             o, d, ep_ret, ep_len = test_env.reset(), False, 0, 0
             while not (d or (ep_len == max_ep_len)):
                 # Take deterministic actions at test time (noise_scale=0)
@@ -401,7 +403,7 @@ def coin(
     total_steps = steps_per_epoch * epochs
     start_time = time.time()
     if env_seed >= 0:
-        env.seed(seed=seed)
+        env.seed(seed=env_seed)
     o, ep_ret, ep_len = env.reset(), 0, 0
     n_episodes = 0
     rollout = []
@@ -448,11 +450,12 @@ def coin(
             if n_episodes >= training_starts:
                 regret += compute_regret(ep_ret, base_perf)
             else:
-                base_perf = np.mean(ep_ret_buffer)
+                base_perf = 175  # for lunar lander
+                # base_perf = np.mean(ep_ret_buffer)
             logger.store(Regret=regret)
 
             if env_seed >= 0:
-                env.seed(seed=seed)
+                env.seed(seed=env_seed)
 
             o, ep_ret, ep_len = env.reset(), 0, 0
 
