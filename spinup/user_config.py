@@ -11,6 +11,7 @@ DEFAULT_BACKEND = {
     "td3": "pytorch",
     "sac": "pytorch",
     "coin": "pytorch",
+    "coinr": "pytorch",
     "dqn": "pytorch",
 }
 

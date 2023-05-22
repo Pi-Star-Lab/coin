@@ -30,7 +30,7 @@ SUBSTITUTIONS = {
 MPI_COMPATIBLE_ALGOS = ["vpg", "trpo", "ppo"]
 
 # Algo names (used in a few places)
-BASE_ALGO_NAMES = ["vpg", "trpo", "ppo", "ddpg", "td3", "sac", "coin", "dqn"]
+BASE_ALGO_NAMES = ["vpg", "trpo", "ppo", "ddpg", "td3", "sac", "coin", "coinr", "dqn"]
 
 
 def add_with_backends(algo_list):
@@ -154,7 +154,10 @@ def parse_and_execute_grid_search(cmd, args):
             "This algorithm can't be run with num_cpu > 1."
         )
 
-    if "Bridge" not in arg_dict["env_name"]:
+    if (
+        "Bridge" not in arg_dict["env_name"][0]
+        and "Flat" not in arg_dict["env_name"][0]
+    ):
         # Special handling for environment: make sure that env_name is a real,
         # registered gym environment.
         valid_envs = [e.id for e in list(gym.envs.registry.all())]

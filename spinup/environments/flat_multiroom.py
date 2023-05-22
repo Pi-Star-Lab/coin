@@ -207,6 +207,11 @@ class FlatMultiRoomEnvN2S4(FlatMultiRoomEnv):
         super().__init__(minNumRooms=2, maxNumRooms=2, maxRoomSize=4)
 
 
+class FlatMultiRoomEnvN2S6(FlatMultiRoomEnv):
+    def __init__(self):
+        super().__init__(minNumRooms=2, maxNumRooms=2, maxRoomSize=6)
+
+
 class FlatMultiRoomEnvN4S5(FlatMultiRoomEnv):
     def __init__(self):
         super().__init__(minNumRooms=4, maxNumRooms=4, maxRoomSize=5)

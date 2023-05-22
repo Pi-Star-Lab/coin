@@ -2,6 +2,7 @@ from copy import deepcopy
 from collections import deque
 
 import numpy as np
+from scipy.special import softmax
 import torch
 from torch.optim import Adam
 import gym
@@ -59,29 +60,34 @@ class ReplayBuffer:
 def dqn(
     env_fn,
     q_net=core.DQNQFunction,
-    q_net_kwargs=dict(),
+    ac_kwargs=dict(),
     seed=0,
     steps_per_epoch=5000,
     epochs=100,
     replay_size=int(1e6),
     gamma=0.99,
     polyak=0.995,
-    q_lr=1e-3,
-    batch_size=32,  # 128,
-    update_interval=500,  # 50,
+    q_lr=1e-4,
+    batch_size=32,
+    update_interval=50,
     num_test_episodes=0,
     max_ep_len=1000,
     grad_steps=1,
     max_grad_norm=10,
-    epsilon_start=1.0,
-    epsilon_end=0.05,
-    epsilon_frac=0.3,
-    training_starts=2,
-    prior_q_net_path=None,
-    # prior_q_net_path="/home/sheelabhadra/Pi-Star/spinningup/data/dqn_multiroom_subopt/dqn_multiroom_subopt_s0/pyt_save/model.pt",
+    epsilon_start=0.01,
+    epsilon_end=0.01,
+    epsilon_frac=0.5,
+    temperature_start=10,
+    temperature_end=0.1,
+    temperature_frac=0.5,
+    training_starts=0,
+    base_q_net_path=None,
     log_freq=10,
     logger_kwargs=dict(),
     save_freq=5000,
+    env_seed=-1,
+    mimic_base=False,
+    exploration_strategy="eps",
 ):
     """
     Deep Q-Network Learning (DQN).
@@ -102,7 +108,7 @@ def dqn(
             ``act``      (batch)           | Numpy array of actions for a batch of
                                            | observations.
             ===========  ================  ======================================
-        q_net_kwargs (dict): Any kwargs appropriate for the Q-network you provided
+        ac_kwargs (dict): Any kwargs appropriate for the Q-network you provided
             to DQN.
         seed (int): Seed for random number generators.
         steps_per_epoch (int): Number of steps of interaction (state-action pairs)
@@ -136,16 +142,23 @@ def dqn(
         epsilon_end (float): Final epsilon value.
         epsilon_frac (float): Fraction of total number of env interactions to
             reach the final epsilon value.
+        temperature (float): Temperature for Boltzmann exploration.
         training_starts (int): Number of episodes after which training starts.
-        prior_q_net_path (str): Path to the Q-net affiliated with the prior
+        base_q_net_path (str): Path to the Q-net affiliated with the base
             suboptimal policy.
         log_freq (int): How often (episodes) to log training stats.
         logger_kwargs (dict): Keyword args for EpochLogger.
         save_freq (int): How often (in terms of gap between epochs) to save
             the current policy and value function.
+        env_seed (int): Environment seed if the baseline policy works only on a
+            environment seed.
+        mimic_base (bool): Train a policy that mimics the baseline policy. Only
+            used to create a baseline policy for initialization.
+        exploration_strategy (str): One of "eps", "boltz", or "opt_norm".
     """
 
-    prior_ret = 0
+    # Performance of baseline policy
+    base_perf = 0
     regret = 0
 
     ep_ret_buffer = deque(maxlen=100)
@@ -160,17 +173,17 @@ def dqn(
     obs_dim = env.observation_space.shape
 
     # Create q-network module and target network
-    q_net = q_net(env.observation_space, env.action_space, **q_net_kwargs)
+    q_net = q_net(env.observation_space, env.action_space, **ac_kwargs)
 
-    # Get prior q-network
-    if prior_q_net_path is not None:
-        prior_q_net = torch.load(prior_q_net_path)
+    # Get base q-network
+    if base_q_net_path is not None:
+        base_q_net = torch.load(base_q_net_path)
         assert isinstance(
-            prior_q_net, core.DQNQFunction
-        ), "Prior Q-net must of type `DQNQFunction`."
-        q_net.q = deepcopy(prior_q_net.q)
+            base_q_net, core.DQNQFunction
+        ), "base Q-net must of type `DQNQFunction`."
+        q_net.q = deepcopy(base_q_net.q)
     else:
-        prior_q_net = None
+        base_q_net = None
 
     q_net_targ = deepcopy(q_net)
 
@@ -187,6 +200,11 @@ def dqn(
 
     def exploration_schedule(epsilon_start, frac_steps, epsilon_frac):
         return max(epsilon_end, epsilon_start * (1 - frac_steps / epsilon_frac))
+
+    def temperature_schedule(temperature_start, frac_steps, temperature_frac):
+        return max(
+            temperature_end, temperature_start * (1 - frac_steps / temperature_frac)
+        )
 
     # Set up function for computing DQN loss
     def compute_loss_q(data):
@@ -248,22 +266,33 @@ def dqn(
                 p_targ.data.mul_(polyak)
                 p_targ.data.add_((1 - polyak) * p.data)
 
-    def get_action(o, deterministic=False):
+    def get_action(o, exploration_strategy="eps", deterministic=False):
         if len(o.shape) > 1:
             # For grayscale image input we add an axis for the channel
             o = torch.as_tensor(o, dtype=torch.float32).unsqueeze_(1)
         else:
             o = torch.as_tensor(o, dtype=torch.float32)
-        if deterministic:
+        if exploration_strategy == "eps":
+            if deterministic:
+                return q_net.act(o)
+            if np.random.rand() < exploration_rate:
+                return np.random.choice(env.action_space.n)
             return q_net.act(o)
-        if np.random.rand() < exploration_rate:
-            return np.random.choice(env.action_space.n)
-        return q_net.act(o)
+        elif exploration_strategy == "boltz":
+            if deterministic:
+                return q_net.act(o)
+            else:
+                return np.random.choice(
+                    env.action_space.n,
+                    p=softmax(q_net.q(o).detach().numpy() / temperature),
+                )
+        elif exploration_strategy == "opt_norm":
+            return q_net.act(o)
 
     def test_agent():
         for j in range(num_test_episodes):
-            # test_env.seed(seed=seed)
-            # test_env.seed(seed=1)
+            if env_seed >= 0:
+                test_env.seed(seed=env_seed)
             o, d, ep_ret, ep_len = test_env.reset(), False, 0, 0
             while not (d or (ep_len == max_ep_len)):
                 # Take deterministic actions at test time (noise_scale=0)
@@ -275,30 +304,29 @@ def dqn(
                 ep_len += 1
             logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
 
-    def compute_regret(cur_return, prior_ret):
+    def compute_regret(cur_return, base_perf):
         """
         Computes the episodic regret.
         """
-        return max(prior_ret - cur_return, 0)
+        return max(base_perf - cur_return, 0)
 
     # Prepare for interaction with environment
     total_steps = steps_per_epoch * epochs
     start_time = time.time()
-    # env.seed(seed=seed)
-    # env.seed(seed=1)
+    if env_seed >= 0:
+        env.seed(seed=env_seed)
     o, ep_ret, ep_len = env.reset(), 0, 0
     n_episodes = 0
-    exploration_rate = epsilon_start
+    exploration_rate = 0  # epsilon_start
+    temperature = 1
+    r_1st = 0
 
     for t in range(total_steps):
-        a = get_action(o)
+        a = get_action(o, exploration_strategy)
         if isinstance(a, np.ndarray):
             a = a.item()
         # Step the env
         o2, r, d, _ = env.step(a)
-
-        # env.render()
-        # time.sleep(1e-2)
 
         ep_ret += r
         ep_len += 1
@@ -306,30 +334,51 @@ def dqn(
         d = False if ep_len == max_ep_len else d
 
         # Add experience to replay buffer
-        replay_buffer.store(o, a, r, o2, d)
+        if exploration_strategy == "opt_norm":
+            if r_1st == 0 and abs(r) > 0:
+                r_1st = abs(r)
+            if r_1st > 0:
+                replay_buffer.store(o, a, r / r_1st + gamma - 1, o2, d)
+            else:
+                replay_buffer.store(o, a, r, o2, d)
+        else:
+            replay_buffer.store(o, a, r, o2, d)
+
+        if mimic_base:
+            # Add fake transition to replay buffer
+            not_a = np.random.choice([i for i in range(env.action_space.n) if i != a])
+            replay_buffer.store(o, not_a, r - 1, o2, d)
 
         # Exploration schedule
         if n_episodes >= training_starts:
             exploration_rate = exploration_schedule(
                 epsilon_start, t / total_steps, epsilon_frac
             )
+            temperature = temperature_schedule(
+                temperature_start, t / total_steps, temperature_frac
+            )
+        else:
+            exploration_rate = 0
+            temperature = 1
         # Super critical, easy to overlook step: make sure to update
         # most recent observation!
         o = o2
 
         # End of trajectory handling
         if d or (ep_len == max_ep_len):
+            # print(f"{ep_ret}, {ep_len}")
             n_episodes += 1
             logger.store(EpRet=ep_ret, EpLen=ep_len)
             ep_ret_buffer.append(ep_ret)
             if n_episodes >= training_starts:
-                regret += compute_regret(ep_ret, prior_ret)
+                regret += compute_regret(ep_ret, base_perf)
             else:
-                prior_ret = np.mean(ep_ret_buffer)
+                base_perf = 175  # for lunar lander
+                # base_perf = np.mean(ep_ret_buffer)
             logger.store(Regret=regret)
 
-            # env.seed(seed=seed)
-            # env.seed(seed=1)
+            if env_seed >= 0:
+                env.seed(seed=env_seed)
             o, ep_ret, ep_len = env.reset(), 0, 0
 
             # Logging
@@ -339,17 +388,19 @@ def dqn(
 
                 # Log info about epoch
                 logger.log_tabular("Episodes", n_episodes)
-                logger.log_tabular("Epsilon", exploration_rate)
+                if exploration_strategy == "eps":
+                    logger.log_tabular("Epsilon", exploration_rate)
+                elif exploration_strategy == "boltz":
+                    logger.log_tabular("Temperature", temperature)
                 logger.log_tabular("EpRet", with_min_and_max=True)
                 logger.log_tabular("EpLen", average_only=True)
                 if num_test_episodes > 0:
                     logger.log_tabular("TestEpRet", with_min_and_max=True)
                     logger.log_tabular("TestEpLen", average_only=True)
-                if "QVals" in logger.epoch_dict:
-                    logger.log_tabular("QVals", with_min_and_max=True)
-                    logger.log_tabular("LossQ", average_only=True)
                 logger.log_tabular("TotalEnvInteracts", t)
-                logger.log_tabular("Regret", regret)
+                if base_q_net is not None:
+                    logger.log_tabular("BasePerf", base_perf)
+                    logger.log_tabular("Regret", regret)
                 logger.log_tabular("Time", time.time() - start_time)
                 logger.dump_tabular()
 
@@ -370,13 +421,15 @@ def dqn(
             # Save all the desired logs into npy files for plotting
             logger.save_log("EpRet")
             logger.save_log("EpLen")
-            logger.save_log("Regret")
+            if base_q_net is not None:
+                logger.save_log("Regret")
 
     # Save everything at the end of training
     logger.save_state({"env": env}, None)
     logger.save_log("EpRet")
     logger.save_log("EpLen")
-    logger.save_log("Regret")
+    if base_q_net is not None:
+        logger.save_log("Regret")
 
 
 if __name__ == "__main__":
@@ -399,7 +452,7 @@ if __name__ == "__main__":
     dqn(
         lambda: gym.make(args.env),
         q_net=core.DQNQFunction,
-        q_net_kwargs=dict(hidden_sizes=[args.hid] * args.l),
+        ac_kwargs=dict(hidden_sizes=[args.hid] * args.l),
         gamma=args.gamma,
         seed=args.seed,
         epochs=args.epochs,

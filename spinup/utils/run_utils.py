@@ -33,6 +33,7 @@ from spinup.environments.flat_multiroom import (
     FlatMultiRoomEnvN4S5,
     FlatMultiRoomEnvN2S6,
 )
+from spinup.environments.car_racing import CarRacingDiscrete
 
 
 DIV_LINE_WIDTH = 80
@@ -193,15 +194,28 @@ def call_experiment(
                     elif "N2S6" in kwargs["env_name"]:
                         kwargs["env_fn"] = FlatMultiRoomEnvN2S6
             elif "NoFrameskip" in kwargs["env_name"]:
-                from spinup.environments.atari import AtariPreprocessing
+                # from spinup.environments.atari import AtariPreprocessing
+
+                # env_name = kwargs["env_name"]
+                # kwargs["env_fn"] = lambda: AtariPreprocessing(
+                #     gym.make(env_name),
+                #     terminal_on_life_loss=False,
+                #     grayscale_newaxis=True,
+                #     scale_obs=True,
+                # )
+                from spinup.environments.atari import make_atari, wrap_deepmind
 
                 env_name = kwargs["env_name"]
-                kwargs["env_fn"] = lambda: AtariPreprocessing(
-                    gym.make(env_name),
-                    terminal_on_life_loss=False,
-                    grayscale_newaxis=True,
-                    scale_obs=True,
-                )
+                env = make_atari(env_name)
+                kwargs["env_fn"] = wrap_deepmind(env, frame_stack=True, scale=True)
+                # kwargs["env_fn"] = lambda: AtariPreprocessing(
+                #     gym.make(env_name),
+                #     terminal_on_life_loss=False,
+                #     grayscale_newaxis=True,
+                #     scale_obs=True,
+                # )
+            elif "CarRacing" in kwargs["env_name"]:
+                kwargs["env_fn"] = CarRacingDiscrete
             else:
                 env_name = kwargs["env_name"]
                 kwargs["env_fn"] = lambda: gym.make(env_name)

@@ -5,7 +5,7 @@ import numpy as np
 
 from gym import spaces
 from gym_minigrid.wrappers import *
-from gym_minigrid.minigrid import MiniGridEnv
+from gym_minigrid.minigrid import *
 
 
 class FlatMiniGridEnv(MiniGridEnv):
@@ -50,11 +50,8 @@ class FlatMiniGridEnv(MiniGridEnv):
         # Range of possible rewards
         self.reward_range = (0, 1)
 
-        # Renderer object used to render the whole grid (full-scale)
-        self.grid_render = None
-
-        # Renderer used to render observations (small-scale agent view)
-        self.obs_render = None
+        # Window to use for human rendering mode
+        self.window = None
 
         # Environment configuration
         self.width = width
