@@ -12,6 +12,7 @@ DEFAULT_BACKEND = {
     "sac": "pytorch",
     "coin": "pytorch",
     "coinr": "pytorch",
+    "coinrdiv": "pytorch",
     "dqn": "pytorch",
 }
 

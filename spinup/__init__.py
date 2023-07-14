@@ -20,6 +20,7 @@ from spinup.algos.pytorch.trpo.trpo import trpo as trpo_pytorch
 from spinup.algos.pytorch.vpg.vpg import vpg as vpg_pytorch
 from spinup.algos.pytorch.coin.coin import coin as coin_pytorch
 from spinup.algos.pytorch.coinr.coinr import coinr as coinr_pytorch
+from spinup.algos.pytorch.coinrdiv.coinrdiv import coinrdiv as coinrdiv_pytorch
 from spinup.algos.pytorch.dqn.dqn import dqn as dqn_pytorch
 
 # Loggers
