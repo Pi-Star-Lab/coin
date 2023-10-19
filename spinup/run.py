@@ -38,9 +38,13 @@ BASE_ALGO_NAMES = [
     "td3",
     "sac",
     "coin",
+    "coin_bdual",
+    "coin_td3",
     "coinr",
     "coinrdiv",
     "dqn",
+    "optinit",
+    "rnd",
 ]
 
 
@@ -168,6 +172,7 @@ def parse_and_execute_grid_search(cmd, args):
     if (
         "Bridge" not in arg_dict["env_name"][0]
         and "Flat" not in arg_dict["env_name"][0]
+        and "Custom" not in arg_dict["env_name"][0]
     ):
         # Special handling for environment: make sure that env_name is a real,
         # registered gym environment.

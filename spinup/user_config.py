@@ -11,9 +11,13 @@ DEFAULT_BACKEND = {
     "td3": "pytorch",
     "sac": "pytorch",
     "coin": "pytorch",
+    "coin_bdual": "pytorch",
+    "coin_td3": "pytorch",
     "coinr": "pytorch",
     "coinrdiv": "pytorch",
     "dqn": "pytorch",
+    "optinit": "pytorch",
+    "rnd": "pytorch",
 }
 
 # Where experiment outputs are saved by default:

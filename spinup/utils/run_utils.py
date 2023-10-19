@@ -34,6 +34,7 @@ from spinup.environments.flat_multiroom import (
     FlatMultiRoomEnvN2S6,
 )
 from spinup.environments.car_racing import CarRacingDiscrete
+from spinup.environments.custom_lunarlander import CustomLunarLander
 
 
 DIV_LINE_WIDTH = 80
@@ -193,6 +194,8 @@ def call_experiment(
                         kwargs["env_fn"] = FlatMultiRoomEnvN4S5
                     elif "N2S6" in kwargs["env_name"]:
                         kwargs["env_fn"] = FlatMultiRoomEnvN2S6
+            elif "Custom" in kwargs["env_name"]:
+                kwargs["env_fn"] = CustomLunarLander
             elif "NoFrameskip" in kwargs["env_name"]:
                 # from spinup.environments.atari import AtariPreprocessing
 
