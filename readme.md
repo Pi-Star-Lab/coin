@@ -12,6 +12,12 @@ python -m spinup.run <algo> --env <env_name> --exp_name <log_folder> --epochs <n
 
 e.g.,
 
+For discrete actions
 ```sh
-python -m spinup.run coin --env LunarLander-v2 --exp_name coin_lunarlander_b_0_2_freq_50000 --epochs 60 --bonus 0.2 --bonus_freq 50000 --seed 0
+python -m spinup.run coin_bdual --env LunarLander-v2 --exp_name coin_bdual_lunarlander --epochs 60  --eps_disp 0.05 --eps_b 0.1 --seed 0
+```
+
+For continuous control
+```
+python -m spinup.run coin_td3 --env LunarLanderContinuous-v2 --exp_name coin_td3_lunarlander --epochs 100 --eps_disp 0.05 --eps_b 0.1 --seed 0
 ```
