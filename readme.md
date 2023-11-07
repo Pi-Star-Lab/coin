@@ -1,7 +1,20 @@
 Continual Optimistic INitialization (COIN)
 ==========================================
 
-This codebase is based on the [Spinning Up repository](https://github.com/openai/spinningup/tree/master). Please follow the installation instructions provided [here](https://spinningup.openai.com/en/latest/user/installation.html).
+This codebase is based on the [Spinning Up repository](https://github.com/openai/spinningup/tree/master).
+
+Installation
+------------
+Install Anaconda. Then run
+
+```sh
+git clone https://github.com/Pi-Star-Lab/spinning-coin.git
+cd spinning-coin
+git checkout origin/feature/coin_non_stationary
+conda env create -f environment.yml
+conda activate spinup
+pip install -e .
+```
 
 Running experiments
 -------------------
