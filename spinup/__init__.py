@@ -24,8 +24,9 @@ from spinup.algos.pytorch.coin_td3.coin_td3 import coin_td3 as coin_td3_pytorch
 from spinup.algos.pytorch.coinr.coinr import coinr as coinr_pytorch
 from spinup.algos.pytorch.coinrdiv.coinrdiv import coinrdiv as coinrdiv_pytorch
 from spinup.algos.pytorch.dqn.dqn import dqn as dqn_pytorch
-from spinup.algos.pytorch.optinit.optinit import optinit as optinit_pytorch
-from spinup.algos.pytorch.rnd.rnd import rnd as rnd_pytorch
+
+# from spinup.algos.pytorch.optinit.optinit import optinit as optinit_pytorch
+# from spinup.algos.pytorch.rnd.rnd import rnd as rnd_pytorch
 
 # Loggers
 from spinup.utils.logx import Logger, EpochLogger
