@@ -10,6 +10,9 @@ import gym
 import spinup.algos.pytorch.coin_td3.core as core
 from spinup.utils.logx import EpochLogger
 
+import dm2gym.envs.dm_suite_env as dm2gym
+from dm_env import TimeStep
+
 
 class ReplayBuffer:
     """
@@ -207,6 +210,8 @@ def coin_td3(
         eps_disp (float): Threshold for dispersion.
 
         eps_b (float): Epsilon for b_dual.
+
+        env_seed (int): Environment seed.
     """
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())
@@ -214,15 +219,32 @@ def coin_td3(
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    env, test_env = env_fn(), env_fn()
-    obs_dim = env.observation_space.shape
-    act_dim = env.action_space.shape[0]
+    try:
+        env, test_env = env_fn(), env_fn()
+        obs_dim = env.observation_space.shape
+        act_dim = env.action_space.shape[0]
 
-    # Action limit for clamping: critically, assumes all dimensions share the same bound!
-    act_limit = env.action_space.high[0]
+        # Action limit for clamping: critically, assumes all dimensions share the same bound!
+        act_limit = env.action_space.high[0]
 
-    # Create actor-critic module and target networks
-    ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
+        # Create actor-critic module and target networks
+        ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
+    except:
+        # Setup for realworldrl_suite envs
+        env, test_env = env_fn, env_fn
+        observation_space = dm2gym.convert_dm_control_to_gym_space(
+            env.observation_spec()
+        )
+        action_space = dm2gym.convert_dm_control_to_gym_space(env.action_spec())
+        obs_dim = observation_space.shape[0]
+        act_dim = action_space.shape[0]
+
+        # Action limit for clamping: critically, assumes all dimensions share the same bound!
+        act_limit = action_space.high.item()
+
+        # Create actor-critic module and target networks
+        ac = actor_critic(observation_space, action_space, **ac_kwargs)
+
     ac_targ = deepcopy(ac)
 
     # Freeze target networks with respect to optimizers (only update via polyak averaging)
@@ -337,9 +359,14 @@ def coin_td3(
     def test_agent():
         for j in range(num_test_episodes):
             o, d, ep_ret, ep_len = test_env.reset(), False, 0, 0
+            if isinstance(o, TimeStep):
+                o = o.observation
             while not (d or (ep_len == max_ep_len)):
-                # Take deterministic actions at test time (noise_scale=0)
-                o, r, d, _ = test_env.step(get_action(o, 0))
+                next_ = test_env.step(get_action(o))
+                if isinstance(next_, TimeStep):
+                    o, r, d = next_.observation, next_.reward, next_.last()
+                else:
+                    o, r, d, _ = next_
                 ep_ret += r
                 ep_len += 1
             logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
@@ -357,16 +384,22 @@ def coin_td3(
     if env_seed >= 0:
         env.seed(seed=env_seed)
     o, ep_ret, ep_len = env.reset(), 0, 0
+    if isinstance(o, TimeStep):
+        o = o.observation
     n_episodes = 0
     bonus = 0
-    cumulative_bonus = 0
+    cum_bonus = 0
 
     # Main loop: collect experience in env and update/log each epoch
     for t in range(total_steps):
         a = get_action(o)
 
         # Step the env
-        o2, r, d, _ = env.step(a)
+        next_ = env.step(a)
+        if isinstance(next_, TimeStep):
+            o2, r, d = next_.observation, next_.reward, next_.last()
+        else:
+            o2, r, d, _ = next_
 
         # COIN reward
         cr = r - bonus
@@ -391,8 +424,6 @@ def coin_td3(
             n_episodes += 1
             logger.store(EpRet=ep_ret, EpLen=ep_len)
 
-            o, ep_ret, ep_len = env.reset(), 0, 0
-
             # Update bonus
             if n_episodes % 20 == 0 and is_new_coin_iteration(logger):
                 # Compute the bonus
@@ -401,7 +432,7 @@ def coin_td3(
                     bonus = 0.1 * (max_q - min_q) * (1 - gamma) + eps_b
                     # Update coin rewards in buffer
                     replay_buffer.update_coin_rewards(bonus)
-                    cumulative_bonus += bonus
+                    cum_bonus += bonus
 
             # Logging
             if n_episodes % log_freq == 0:
@@ -416,14 +447,18 @@ def coin_td3(
                     logger.log_tabular("TestEpRet", with_min_and_max=True)
                     logger.log_tabular("TestEpLen", average_only=True)
                 logger.log_tabular("TotalEnvInteracts", t)
-                logger.log_tabular("Q1Vals", with_min_and_max=True)
-                logger.log_tabular("Q2Vals", with_min_and_max=True)
-                logger.log_tabular("LossPi", average_only=True)
-                logger.log_tabular("LossQ", average_only=True)
+                # logger.log_tabular("Q1Vals", with_min_and_max=True)
+                # logger.log_tabular("Q2Vals", with_min_and_max=True)
+                # logger.log_tabular("LossPi", average_only=True)
+                # logger.log_tabular("LossQ", average_only=True)
                 logger.log_tabular("Bonus", bonus)
-                logger.log_tabular("CumBonus", cumulative_bonus)
+                logger.log_tabular("CumBonus", cum_bonus)
                 logger.log_tabular("Time", time.time() - start_time)
                 logger.dump_tabular()
+
+            o, ep_ret, ep_len = env.reset(), 0, 0
+            if isinstance(o, TimeStep):
+                o = o.observation
 
         # Update handling
         if t >= update_after and t % update_every == 0:

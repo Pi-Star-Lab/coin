@@ -13,6 +13,8 @@ import torch
 from copy import deepcopy
 from textwrap import dedent
 
+import realworldrl_suite.environments as rwrl
+
 # Command line args that will go to ExperimentGrid.run, and must possess unique
 # values (therefore must be treated separately).
 RUN_KEYS = ["num_cpu", "data_dir", "datestamp"]
@@ -169,35 +171,36 @@ def parse_and_execute_grid_search(cmd, args):
             "This algorithm can't be run with num_cpu > 1."
         )
 
-    if (
-        "Bridge" not in arg_dict["env_name"][0]
-        and "Flat" not in arg_dict["env_name"][0]
-        and "Custom" not in arg_dict["env_name"][0]
-    ):
-        # Special handling for environment: make sure that env_name is a real,
-        # registered gym environment.
-        valid_envs = [e.id for e in list(gym.envs.registry.all())]
-        assert "env_name" in arg_dict, friendly_err(
-            "You did not give a value for --env_name! Add one and try again."
-        )
-        for env_name in arg_dict["env_name"]:
-            err_msg = dedent(
-                """
-
-                %s is not registered with Gym.
-
-                Recommendations:
-
-                    * Check for a typo (did you include the version tag?)
-
-                    * View the complete list of valid Gym environments at
-
-                        https://gym.openai.com/envs/
-
-                """
-                % env_name
+    if "task_name" not in arg_dict:
+        if (
+            "Bridge" not in arg_dict["env_name"][0]
+            and "Flat" not in arg_dict["env_name"][0]
+            and "Custom" not in arg_dict["env_name"][0]
+        ):
+            # Special handling for environment: make sure that env_name is a real,
+            # registered gym environment.
+            valid_envs = [e.id for e in list(gym.envs.registry.all())]
+            assert "env_name" in arg_dict, friendly_err(
+                "You did not give a value for --env_name! Add one and try again."
             )
-            assert env_name in valid_envs, err_msg
+            for env_name in arg_dict["env_name"]:
+                err_msg = dedent(
+                    """
+
+                    %s is not registered with Gym.
+
+                    Recommendations:
+
+                        * Check for a typo (did you include the version tag?)
+
+                        * View the complete list of valid Gym environments at
+
+                            https://gym.openai.com/envs/
+
+                    """
+                    % env_name
+                )
+                assert env_name in valid_envs, err_msg
 
     # Construct and execute the experiment grid.
     eg = ExperimentGrid(name=exp_name)
