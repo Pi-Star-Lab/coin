@@ -35,10 +35,10 @@ dependencies:
     - cycler==0.11.0
     - dataclasses==0.8
     - decorator==5.1.1
-    - dm-control==0.0.364896371
-    - dm-env==1.5
-    - dm-tree==0.1.8
-    - dm2gym==0.2.0
+    # - dm-control==0.0.364896371
+    # - dm-env==1.5
+    # - dm-tree==0.1.8
+    # - dm2gym==0.2.0
     - future==0.18.3
     - gast==0.2.2
     - glfw==2.6.2
@@ -62,7 +62,7 @@ dependencies:
     - lxml==4.9.3
     - markdown==3.3.7
     - matplotlib==3.1.1
-    - mpi4py==3.1.5
+    # - mpi4py==3.1.5
     - numpy==1.18.5
     - opencv-python==4.5.2.52
     - opt-einsum==3.3.0
