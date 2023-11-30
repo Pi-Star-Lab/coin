@@ -240,7 +240,7 @@ def coin_td3(
         act_dim = action_space.shape[0]
 
         # Action limit for clamping: critically, assumes all dimensions share the same bound!
-        act_limit = action_space.high.item()
+        act_limit = action_space.high[0]
 
         # Create actor-critic module and target networks
         ac = actor_critic(observation_space, action_space, **ac_kwargs)
@@ -375,7 +375,7 @@ def coin_td3(
         # If returns are fairly constant for the last few episodes
         if "EpRet" in logger.epoch_dict.keys():
             ep_ret_mean, ep_ret_std = logger.get_stats("EpRet")
-            return ep_ret_std / abs(ep_ret_mean) < eps_disp
+            return ep_ret_std / (abs(ep_ret_mean) + 0.00001) < eps_disp
         return False
 
     # Prepare for interaction with environment
@@ -428,7 +428,7 @@ def coin_td3(
             if n_episodes % 20 == 0 and is_new_coin_iteration(logger):
                 # Compute the bonus
                 if "Q1Vals" in logger.epoch_dict.keys():
-                    _, _, max_q, min_q = logger.get_stats("Q1Vals", True)
+                    _, _, min_q, max_q = logger.get_stats("Q1Vals", True)
                     bonus = 0.1 * (max_q - min_q) * (1 - gamma) + eps_b
                     # Update coin rewards in buffer
                     replay_buffer.update_coin_rewards(bonus)
@@ -453,6 +453,8 @@ def coin_td3(
                 # logger.log_tabular("LossQ", average_only=True)
                 logger.log_tabular("Bonus", bonus)
                 logger.log_tabular("CumBonus", cum_bonus)
+                logger.log_tabular("PerturbParam", env.task._perturb_param)
+                logger.log_tabular("PerturbVal", env.task._perturb_cur)
                 logger.log_tabular("Time", time.time() - start_time)
                 logger.dump_tabular()
 
