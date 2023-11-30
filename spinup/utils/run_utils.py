@@ -35,6 +35,14 @@ from spinup.environments.flat_multiroom import (
 )
 from spinup.environments.car_racing import CarRacingDiscrete
 from spinup.environments.custom_lunarlander import CustomLunarLander
+from spinup.environments.nonstationary_lunarlander import (
+    NonStationaryLunarLander,
+    NonStationaryLunarLanderContinuous,
+)
+from spinup.environments.nonstationary_flat_empty import (
+    NonStationaryFlatEmptyEnv6x6,
+    NonStationaryFlatEmptyEnv16x16,
+)
 
 import realworldrl_suite.environments as rwrl
 
@@ -172,16 +180,23 @@ def call_experiment(
         # Make 'env_fn' from 'env_name'
         if "env_name" in kwargs:
             if "task_name" in kwargs:
+                # kwargs["env_fn"] = rwrl.load(
+                #     domain_name=kwargs["env_name"],
+                #     task_name=kwargs["task_name"],
+                #     perturb_spec=dict(
+                #         enable=True,
+                #         period=250,
+                #         param="contact_friction",
+                #         scheduler="uniform",
+                #         min=0.01,
+                #         max=2.0,
+                #         std=0.05,
+                #     ),
+                #     environment_kwargs=dict(flat_observation=True),
+                # )
                 kwargs["env_fn"] = rwrl.load(
                     domain_name=kwargs["env_name"],
                     task_name=kwargs["task_name"],
-                    perturb_spec=dict(
-                        enable=True,
-                        period=60,
-                        param="pole_length",
-                        min=0.5,
-                        max=2.3,
-                    ),
                     environment_kwargs=dict(flat_observation=True),
                 )
                 del kwargs["env_name"]
@@ -189,56 +204,71 @@ def call_experiment(
             else:
                 import gym
 
-                if "Bridge" in kwargs["env_name"]:
-                    kwargs["env_fn"] = Bridge
-                elif "Flat" in kwargs["env_name"]:
-                    if "FourRooms" in kwargs["env_name"]:
-                        if "7x7" in kwargs["env_name"]:
-                            kwargs["env_fn"] = FlatFourRoomsEnv7x7
-                        elif "9x9" in kwargs["env_name"]:
-                            kwargs["env_fn"] = FlatFourRoomsEnv9x9
-                    elif "Empty" in kwargs["env_name"]:
-                        if "Random" in kwargs["env_name"]:
-                            if "6x6" in kwargs["env_name"]:
-                                kwargs["env_fn"] = FlatEmptyRandomEnv6x6
+                if "NonStationary" in kwargs["env_name"]:
+                    if "LunarLander" in kwargs["env_name"]:
+                        if "Continuous" in kwargs["env_name"]:
+                            kwargs["env_fn"] = NonStationaryLunarLanderContinuous
                         else:
+                            kwargs["env_fn"] = NonStationaryLunarLander
+                    if "Flat" in kwargs["env_name"]:
+                        if "Empty" in kwargs["env_name"]:
                             if "6x6" in kwargs["env_name"]:
-                                kwargs["env_fn"] = FlatEmptyEnv6x6
-                    elif "MultiRoom" in kwargs["env_name"]:
-                        if "N2S4" in kwargs["env_name"]:
-                            kwargs["env_fn"] = FlatMultiRoomEnvN2S4
-                        elif "N4S5" in kwargs["env_name"]:
-                            kwargs["env_fn"] = FlatMultiRoomEnvN4S5
-                        elif "N2S6" in kwargs["env_name"]:
-                            kwargs["env_fn"] = FlatMultiRoomEnvN2S6
-                elif "Custom" in kwargs["env_name"]:
-                    kwargs["env_fn"] = CustomLunarLander
-                elif "NoFrameskip" in kwargs["env_name"]:
-                    # from spinup.environments.atari import AtariPreprocessing
-
-                    # env_name = kwargs["env_name"]
-                    # kwargs["env_fn"] = lambda: AtariPreprocessing(
-                    #     gym.make(env_name),
-                    #     terminal_on_life_loss=False,
-                    #     grayscale_newaxis=True,
-                    #     scale_obs=True,
-                    # )
-                    from spinup.environments.atari import make_atari, wrap_deepmind
-
-                    env_name = kwargs["env_name"]
-                    env = make_atari(env_name)
-                    kwargs["env_fn"] = wrap_deepmind(env, frame_stack=True, scale=True)
-                    # kwargs["env_fn"] = lambda: AtariPreprocessing(
-                    #     gym.make(env_name),
-                    #     terminal_on_life_loss=False,
-                    #     grayscale_newaxis=True,
-                    #     scale_obs=True,
-                    # )
-                elif "CarRacing" in kwargs["env_name"]:
-                    kwargs["env_fn"] = CarRacingDiscrete
+                                kwargs["env_fn"] = NonStationaryFlatEmptyEnv6x6
+                            elif "16x16" in kwargs["env_name"]:
+                                kwargs["env_fn"] = NonStationaryFlatEmptyEnv16x16
                 else:
-                    env_name = kwargs["env_name"]
-                    kwargs["env_fn"] = lambda: gym.make(env_name)
+                    if "Bridge" in kwargs["env_name"]:
+                        kwargs["env_fn"] = Bridge
+                    elif "Flat" in kwargs["env_name"]:
+                        if "FourRooms" in kwargs["env_name"]:
+                            if "7x7" in kwargs["env_name"]:
+                                kwargs["env_fn"] = FlatFourRoomsEnv7x7
+                            elif "9x9" in kwargs["env_name"]:
+                                kwargs["env_fn"] = FlatFourRoomsEnv9x9
+                        elif "Empty" in kwargs["env_name"]:
+                            if "Random" in kwargs["env_name"]:
+                                if "6x6" in kwargs["env_name"]:
+                                    kwargs["env_fn"] = FlatEmptyRandomEnv6x6
+                            else:
+                                if "6x6" in kwargs["env_name"]:
+                                    kwargs["env_fn"] = FlatEmptyEnv6x6
+                        elif "MultiRoom" in kwargs["env_name"]:
+                            if "N2S4" in kwargs["env_name"]:
+                                kwargs["env_fn"] = FlatMultiRoomEnvN2S4
+                            elif "N4S5" in kwargs["env_name"]:
+                                kwargs["env_fn"] = FlatMultiRoomEnvN4S5
+                            elif "N2S6" in kwargs["env_name"]:
+                                kwargs["env_fn"] = FlatMultiRoomEnvN2S6
+                    elif "Custom" in kwargs["env_name"]:
+                        kwargs["env_fn"] = CustomLunarLander
+                    elif "NoFrameskip" in kwargs["env_name"]:
+                        # from spinup.environments.atari import AtariPreprocessing
+
+                        # env_name = kwargs["env_name"]
+                        # kwargs["env_fn"] = lambda: AtariPreprocessing(
+                        #     gym.make(env_name),
+                        #     terminal_on_life_loss=False,
+                        #     grayscale_newaxis=True,
+                        #     scale_obs=True,
+                        # )
+                        from spinup.environments.atari import make_atari, wrap_deepmind
+
+                        env_name = kwargs["env_name"]
+                        env = make_atari(env_name)
+                        kwargs["env_fn"] = wrap_deepmind(
+                            env, frame_stack=True, scale=True
+                        )
+                        # kwargs["env_fn"] = lambda: AtariPreprocessing(
+                        #     gym.make(env_name),
+                        #     terminal_on_life_loss=False,
+                        #     grayscale_newaxis=True,
+                        #     scale_obs=True,
+                        # )
+                    elif "CarRacing" in kwargs["env_name"]:
+                        kwargs["env_fn"] = CarRacingDiscrete
+                    else:
+                        env_name = kwargs["env_name"]
+                        kwargs["env_fn"] = lambda: gym.make(env_name)
                 del kwargs["env_name"]
 
         # Fork into multiple processes

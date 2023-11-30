@@ -176,6 +176,7 @@ def parse_and_execute_grid_search(cmd, args):
             "Bridge" not in arg_dict["env_name"][0]
             and "Flat" not in arg_dict["env_name"][0]
             and "Custom" not in arg_dict["env_name"][0]
+            and "NonStationary" not in arg_dict["env_name"][0]
         ):
             # Special handling for environment: make sure that env_name is a real,
             # registered gym environment.
