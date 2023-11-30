@@ -97,8 +97,8 @@ def coin(
     update_interval=100,
     num_test_episodes=0,
     max_ep_len=1000,
-    bonus=1,
-    bonus_freq=10000,
+    bonus=0.01,  # 1,
+    bonus_freq=100000,  # 10000,
     log_freq=10,
     logger_kwargs=dict(),
     save_freq=5000,
@@ -216,10 +216,11 @@ def coin(
             # Target Q-value estimates
             targ_q_coin = q_net_targ.q(o)
             # Q-values of other actions must remain unchanged
-            targ_q_coin = targ_q_coin.index_put_(
-                tuple(torch.column_stack((torch.arange(a.shape[0]), a)).long().t()),
-                targ_q_coin_a,
-            )
+            # targ_q_coin = targ_q_coin.index_put_(
+            #     tuple(torch.column_stack((torch.arange(a.shape[0]), a)).long().t()),
+            #     targ_q_coin_a,
+            # )
+            targ_q_coin[torch.arange(0, a.shape[0]), a.long()] = targ_q_coin_a
             backup = targ_q_coin
 
         # MSE loss against Bellman backup
