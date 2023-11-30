@@ -86,7 +86,6 @@ def dqn(
     logger_kwargs=dict(),
     save_freq=5000,
     env_seed=-1,
-    mimic_base=False,
     exploration_strategy="eps",
 ):
     """
@@ -343,11 +342,6 @@ def dqn(
                 replay_buffer.store(o, a, r, o2, d)
         else:
             replay_buffer.store(o, a, r, o2, d)
-
-        if mimic_base:
-            # Add fake transition to replay buffer
-            not_a = np.random.choice([i for i in range(env.action_space.n) if i != a])
-            replay_buffer.store(o, not_a, r - 1, o2, d)
 
         # Exploration schedule
         if n_episodes >= training_starts:
