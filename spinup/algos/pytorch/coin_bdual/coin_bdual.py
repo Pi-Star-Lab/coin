@@ -153,10 +153,8 @@ def coin_bdual(
             # Target Q-value estimates
             targ_q_coin = q_net_targ.q(o)
             # Q-values of other actions must remain unchanged
-            targ_q_coin = targ_q_coin.index_put_(
-                tuple(torch.column_stack((torch.arange(a.shape[0]), a)).long().t()),
-                targ_q_coin_a,
-            )
+            targ_q_coin[torch.arange(0, a.shape[0]), a.long()] = targ_q_coin_a
+
             backup = targ_q_coin
 
         # MSE loss against Bellman backup
@@ -224,7 +222,7 @@ def coin_bdual(
         # If returns are fairly constant for the last few episodes
         if "EpRet" in logger.epoch_dict.keys():
             ep_ret_mean, ep_ret_std = logger.get_stats("EpRet")
-            if ep_ret_std / abs(ep_ret_mean) < eps_disp:
+            if ep_ret_std / (abs(ep_ret_mean) + 0.00001) < eps_disp:
                 return True
             else:
                 return False
@@ -271,10 +269,10 @@ def coin_bdual(
             o, ep_ret, ep_len = env.reset(), 0, 0
 
             # Update bonus
-            if n_episodes % 20 == 0 and is_new_coin_iteration(logger):
+            if n_episodes % 100 == 0 and is_new_coin_iteration(logger):
                 # Compute the bonus
                 if "QVals" in logger.epoch_dict.keys():
-                    _, _, max_q, min_q = logger.get_stats("QVals", True)
+                    _, _, min_q, max_q = logger.get_stats("QVals", True)
                     bonus = 0.1 * (max_q - min_q) * (1 - gamma) + eps_b
                     # Update coin rewards in buffer
                     replay_buffer.update_coin_rewards(bonus)
@@ -297,7 +295,6 @@ def coin_bdual(
                 logger.log_tabular("CumBonus", cum_bonus)
                 logger.log_tabular("Time", time.time() - start_time)
                 logger.dump_tabular()
-            # logger.log_tabular("QVals", with_min_and_max=True)
 
         if len(replay_buffer) >= batch_size and (t + 1) % update_interval == 0:
             for _ in range(update_interval):
