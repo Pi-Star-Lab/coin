@@ -13,6 +13,7 @@ DEFAULT_BACKEND = {
     "coin": "pytorch",
     "coinr": "pytorch",
     "dqn": "pytorch",
+    "dual_coin": "pytorch",
 }
 
 # Where experiment outputs are saved by default:

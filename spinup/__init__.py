@@ -8,6 +8,7 @@ from spinup.algos.pytorch.vpg.vpg import vpg as vpg_pytorch
 from spinup.algos.pytorch.coin.coin import coin as coin_pytorch
 from spinup.algos.pytorch.coinr.coinr import coinr as coinr_pytorch
 from spinup.algos.pytorch.dqn.dqn import dqn as dqn_pytorch
+from spinup.algos.pytorch.dual_coin.dual_coin import dual_coin as dual_coin_pytorch
 
 # Disable TF deprecation warnings.
 # Syntax from tf1 is not expected to be compatible with tf2.

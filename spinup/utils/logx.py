@@ -170,9 +170,14 @@ class Logger:
         config_json = convert_json(config)
         if self.exp_name is not None:
             config_json["exp_name"] = self.exp_name
+
         if proc_id() == 0:
             output = json.dumps(
-                config_json, separators=(",", ":\t"), indent=4, sort_keys=True
+                config_json,
+                default=lambda o: "<not serializable>",
+                separators=(",", ":\t"),
+                indent=4,
+                sort_keys=True,
             )
             print(colorize("Saving config:\n", color="cyan", bold=True))
             print(output)
@@ -404,7 +409,7 @@ class EpochLogger(Logger):
                 super().log_tabular("Min" + key, stats[2])
         self.epoch_dict[key] = []
 
-    def get_stats(self, key):
+    def get_stats(self, key, with_min_and_max=False):
         """
         Lets an algorithm ask the logger for mean/std/min/max of a diagnostic.
         """
@@ -414,7 +419,7 @@ class EpochLogger(Logger):
             if isinstance(v[0], np.ndarray) and len(v[0].shape) > 0
             else v
         )
-        return mpi_statistics_scalar(vals)
+        return mpi_statistics_scalar(vals, with_min_and_max=with_min_and_max)
 
     def save_log(self, key):
         """
