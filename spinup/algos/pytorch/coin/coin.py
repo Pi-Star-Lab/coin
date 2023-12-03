@@ -220,6 +220,7 @@ def coin(
                 tuple(torch.column_stack((torch.arange(a.shape[0]), a)).long().t()),
                 targ_q_coin_a,
             )
+
             backup = targ_q_coin
 
         # MSE loss against Bellman backup
