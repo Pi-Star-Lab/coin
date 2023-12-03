@@ -37,6 +37,11 @@ from spinup.environments.nonstationary_flat_empty import (
     NonStationaryFlatEmptyEnv6x6,
     NonStationaryFlatEmptyEnv16x16,
 )
+from spinup.environments.nonstationary_four_rooms import (
+    NonStationaryFlatFourRoomsEnv3x3,
+    NonStationaryFlatFourRoomsEnv7x7,
+    NonStationaryFlatFourRoomsEnv9x9,
+)
 from spinup.environments.car_racing import CarRacingDiscrete
 
 
@@ -182,6 +187,13 @@ def call_experiment(
                             kwargs["env_fn"] = NonStationaryFlatEmptyEnv6x6
                         elif "16x16" in kwargs["env_name"]:
                             kwargs["env_fn"] = NonStationaryFlatEmptyEnv16x16
+                    elif "FourRooms" in kwargs["env_name"]:
+                        if "3x3" in kwargs["env_name"]:
+                            kwargs["env_fn"] = NonStationaryFlatFourRoomsEnv3x3
+                        elif "7x7" in kwargs["env_name"]:
+                            kwargs["env_fn"] = NonStationaryFlatFourRoomsEnv7x7
+                        elif "9x9" in kwargs["env_name"]:
+                            kwargs["env_fn"] = NonStationaryFlatFourRoomsEnv9x9
             else:
                 if "Bridge" in kwargs["env_name"]:
                     kwargs["env_fn"] = Bridge
