@@ -17,7 +17,7 @@ def dual_coin(
     q_net=core.DQNQFunction,
     ac_kwargs=dict(),
     seed=0,
-    steps_per_epoch=1000,
+    steps_per_epoch=4000,
     epochs=100,
     replay_size=int(1e6),
     gamma=0.99,
@@ -97,7 +97,9 @@ def dual_coin(
     """
 
     # COIN specific hyperparams
-    cum_bonus = 0.0  # cumulative bonus
+    bonus = eps_b
+    cum_bonus = bonus  # cumulative bonus
+    prev_bonus_update_episode = 0
 
     ep_ret_buffer = deque(maxlen=100)
 
@@ -221,15 +223,35 @@ def dual_coin(
                 ep_len += 1
             logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
 
+    # def is_new_coin_iteration(logger):
+    #     # If returns are fairly constant for the last few episodes
+    #     if "EpRet" in logger.epoch_dict.keys():
+    #         ep_ret_mean, ep_ret_std = logger.get_stats("EpRet")
+    #         if ep_ret_std / (abs(ep_ret_mean) + 0.00001) < eps_disp:
+    #             return True
+    #         else:
+    #             return False
+    #     return False
+
     def is_new_coin_iteration(logger):
-        # If returns are fairly constant for the last few episodes
-        if "EpRet" in logger.epoch_dict.keys():
+        # COIN iteration occurs if returns are stable
+        if (
+            "EpRet" in logger.epoch_dict.keys()
+            and len(logger.epoch_dict["EpRet"]) >= 10
+            and len(logger.epoch_dict["EpRet"]) - prev_bonus_update_episode >= 10
+        ):
             ep_ret_mean, ep_ret_std = logger.get_stats("EpRet")
             if ep_ret_std / (abs(ep_ret_mean) + 0.00001) < eps_disp:
                 return True
-            else:
-                return False
         return False
+
+    def bonus_setting(logger):
+        # COIN bonus setting
+        if "QVals" in logger.epoch_dict.keys():
+            _, _, min_q, max_q = logger.get_stats("QVals", True)
+            b = 0.1 * (max_q - min_q) * (1 - gamma) + eps_b
+            return b
+        return None
 
     # Prepare for interaction with environment
     total_steps = steps_per_epoch * epochs
@@ -247,7 +269,7 @@ def dual_coin(
         o2, r, d, _ = env.step(a)
 
         # Penalized reward for exploration
-        cr = r - bonus
+        cr = r - cum_bonus
 
         ep_ret += r
         ep_len += 1
@@ -272,35 +294,33 @@ def dual_coin(
             o, ep_ret, ep_len = env.reset(), 0, 0
 
             # Update bonus
-            if n_episodes % 50 == 0 and is_new_coin_iteration(logger):
-                # Compute the bonus
-                if "QVals" in logger.epoch_dict.keys():
-                    _, _, min_q, max_q = logger.get_stats("QVals", True)
-                    bonus = 0.1 * (max_q - min_q) * (1 - gamma) + eps_b
-                    # Update coin rewards in buffer
+            if is_new_coin_iteration(logger):
+                # Compute the bonus and update replay buffer
+                b_ = bonus_setting(logger)
+                if b_ is not None:
+                    bonus = b_
                     replay_buffer.update_coin_rewards(bonus)
                     cum_bonus += bonus
+                    prev_bonus_update_episode = n_episodes
 
-        # Logging
-        # if n_episodes % log_freq == 0:
-        if (t + 1) % steps_per_epoch == 0:
-            epoch = (t + 1) // steps_per_epoch
-            # Test the performance of the deterministic version of the agent.
-            test_agent()
+            # Logging
+            if n_episodes % log_freq == 0:
+                # Test the performance of the deterministic version of the agent.
+                test_agent()
 
-            logger.log_tabular("Epochs", epoch)
-            logger.log_tabular("Episodes", n_episodes)
-            logger.log_tabular("EpRet", with_min_and_max=True)
-            logger.log_tabular("EpLen", average_only=True)
-            if num_test_episodes > 0:
-                logger.log_tabular("TestEpRet", with_min_and_max=True)
-                logger.log_tabular("TestEpLen", average_only=True)
-            logger.log_tabular("TotalEnvInteracts", t)
-            logger.log_tabular("QVals", with_min_and_max=True)
-            logger.log_tabular("Bonus", bonus)
-            logger.log_tabular("CumBonus", cum_bonus)
-            logger.log_tabular("Time", time.time() - start_time)
-            logger.dump_tabular()
+                logger.log_tabular("Epochs", (t + 1) // steps_per_epoch)
+                logger.log_tabular("Episodes", n_episodes)
+                logger.log_tabular("EpRet", with_min_and_max=True)
+                logger.log_tabular("EpLen", average_only=True)
+                if num_test_episodes > 0:
+                    logger.log_tabular("TestEpRet", with_min_and_max=True)
+                    logger.log_tabular("TestEpLen", average_only=True)
+                logger.log_tabular("TotalEnvInteracts", t)
+                logger.log_tabular("QVals", with_min_and_max=True)
+                logger.log_tabular("Bonus", bonus)
+                logger.log_tabular("CumBonus", cum_bonus)
+                logger.log_tabular("Time", time.time() - start_time)
+                logger.dump_tabular()
 
         if len(replay_buffer) >= batch_size and (t + 1) % update_interval == 0:
             for _ in range(update_interval):

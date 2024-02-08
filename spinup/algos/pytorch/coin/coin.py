@@ -76,7 +76,7 @@ class ReplayBuffer:
         """
         Update coin rewards.
         """
-        for idx in range(self.ptr):
+        for idx in range(self.size):
             self.coin_rew_buf[idx] -= bonus
 
 
@@ -302,7 +302,7 @@ def coin(
         o2, r, d, _ = env.step(a)
 
         # Penalized reward for exploration
-        cr = r - bonus
+        cr = r - cum_bonus
 
         ep_ret += r
         ep_len += 1
